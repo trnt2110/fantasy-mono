@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AliasService } from '../alias/alias.service';
 import { ApiFootballClient } from '../../infrastructure/api-football/api-football.client';
@@ -57,48 +58,66 @@ export class AdminService {
     const club = await this.prisma.club.findUnique({ where: { id: clubId } });
     if (!club) throw new NotFoundException(`Club ${clubId} not found`);
 
-    const alias = await this.prisma.clubAlias.upsert({
+    return this.prisma.clubAlias.upsert({
       where: { clubId },
       create: { clubId, name: dto.name, shortName: dto.shortName, city: dto.city },
       update: { name: dto.name, shortName: dto.shortName, city: dto.city },
     });
-    return alias;
   }
 
   async deleteClubAlias(clubId: number) {
-    await this.prisma.clubAlias.delete({ where: { clubId } });
+    try {
+      await this.prisma.clubAlias.delete({ where: { clubId } });
+    } catch (err) {
+      if (err instanceof PrismaClientKnownRequestError && err.code === 'P2025') {
+        throw new NotFoundException(`Club alias for club ${clubId} not found`);
+      }
+      throw err;
+    }
   }
 
   async upsertPlayerAlias(playerId: number, dto: UpsertPlayerAliasDto) {
     const player = await this.prisma.player.findUnique({ where: { id: playerId } });
     if (!player) throw new NotFoundException(`Player ${playerId} not found`);
 
-    const alias = await this.prisma.playerAlias.upsert({
+    return this.prisma.playerAlias.upsert({
       where: { playerId },
       create: { playerId, name: dto.name },
       update: { name: dto.name },
     });
-    return alias;
   }
 
   async deletePlayerAlias(playerId: number) {
-    await this.prisma.playerAlias.delete({ where: { playerId } });
+    try {
+      await this.prisma.playerAlias.delete({ where: { playerId } });
+    } catch (err) {
+      if (err instanceof PrismaClientKnownRequestError && err.code === 'P2025') {
+        throw new NotFoundException(`Player alias for player ${playerId} not found`);
+      }
+      throw err;
+    }
   }
 
   async upsertCompetitionAlias(competitionId: number, dto: UpsertCompetitionAliasDto) {
     const competition = await this.prisma.competition.findUnique({ where: { id: competitionId } });
     if (!competition) throw new NotFoundException(`Competition ${competitionId} not found`);
 
-    const alias = await this.prisma.competitionAlias.upsert({
+    return this.prisma.competitionAlias.upsert({
       where: { competitionId },
       create: { competitionId, name: dto.name, shortName: dto.shortName },
       update: { name: dto.name, shortName: dto.shortName },
     });
-    return alias;
   }
 
   async deleteCompetitionAlias(competitionId: number) {
-    await this.prisma.competitionAlias.delete({ where: { competitionId } });
+    try {
+      await this.prisma.competitionAlias.delete({ where: { competitionId } });
+    } catch (err) {
+      if (err instanceof PrismaClientKnownRequestError && err.code === 'P2025') {
+        throw new NotFoundException(`Competition alias for competition ${competitionId} not found`);
+      }
+      throw err;
+    }
   }
 
   async triggerBootstrap(season: number) {

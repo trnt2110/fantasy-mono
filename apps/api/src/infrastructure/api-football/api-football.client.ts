@@ -31,7 +31,7 @@ export class ApiFootballClient {
 
     const cached = await this.redis.get(cacheKey);
     if (cached) {
-      this.logger.debug(`Cache hit: ${cacheKey}`);
+      this.logger.debug(`Cache hit: ${path}`);
       return JSON.parse(cached) as T;
     }
 
@@ -49,16 +49,21 @@ export class ApiFootballClient {
     const today = new Date().toISOString().split('T')[0];
     const key = `${RATE_LIMIT_KEY_PREFIX}${today}`;
 
+    // Compute TTL until midnight UTC
+    const now = new Date();
+    const midnight = new Date(now);
+    midnight.setUTCHours(24, 0, 0, 0);
+    const ttl = Math.floor((midnight.getTime() - now.getTime()) / 1000);
+
+    // Atomic INCR — counter is always correct regardless of concurrency
     const count = await this.redis.incr(key);
 
-    if (count === 1) {
-      // Set TTL to expire at midnight UTC
-      const now = new Date();
-      const midnight = new Date(now);
-      midnight.setUTCHours(24, 0, 0, 0);
-      const ttl = Math.floor((midnight.getTime() - now.getTime()) / 1000);
-      await this.redis.expire(key, ttl);
-    }
+    // EXPIRE NX: only set TTL if the key has none yet (Redis 7+ NX option).
+    // This is safe to call on every request — NX means it's a no-op if TTL is already set.
+    // Prevents the "immortal key" bug: if the process dies after INCR but before EXPIRE,
+    // the next request's EXPIRE NX will still set the TTL correctly.
+    // EXPIRE NX: only set TTL if key has no expiry yet (prevents "immortal key" bug)
+    await this.redis.client.call('EXPIRE', key, String(ttl), 'NX');
 
     if (count > DAILY_LIMIT_HARD) {
       this.logger.error(`API-Football daily quota exhausted: ${count} requests`);
@@ -71,7 +76,11 @@ export class ApiFootballClient {
   }
 
   private buildCacheKey(path: string, params?: Record<string, any>): string {
-    const paramStr = params ? `:${JSON.stringify(params)}` : '';
+    // Omit any sensitive keys from the cache key to avoid logging secrets
+    const safeParams = params
+      ? Object.fromEntries(Object.entries(params).filter(([k]) => k !== 'apiKey' && k !== 'key'))
+      : undefined;
+    const paramStr = safeParams ? `:${JSON.stringify(safeParams)}` : '';
     return `api_football:cache:${path}${paramStr}`;
   }
 

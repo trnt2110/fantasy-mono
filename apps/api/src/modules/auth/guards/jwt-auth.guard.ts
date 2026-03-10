@@ -18,8 +18,11 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     return super.canActivate(context);
   }
 
-  handleRequest(err: any, user: any) {
-    if (err || !user) throw err || new UnauthorizedException();
+  handleRequest(err: any, user: any, info: any) {
+    if (err || !user) {
+      // Normalize all JWT errors (expired, invalid signature, etc.) to 401, never 500
+      throw new UnauthorizedException(info?.message ?? 'Unauthorized');
+    }
     return user;
   }
 }

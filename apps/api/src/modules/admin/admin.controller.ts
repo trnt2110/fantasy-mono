@@ -1,5 +1,6 @@
 import {
   Controller,
+  DefaultValuePipe,
   Get,
   Put,
   Delete,
@@ -32,13 +33,19 @@ export class AdminController {
   }
 
   @Get('aliases/clubs')
-  getUnaliasedClubs(@Query('page') page = '1', @Query('limit') limit = '50') {
-    return this.adminService.getUnaliasedClubs(parseInt(page), parseInt(limit));
+  getUnaliasedClubs(
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
+  ) {
+    return this.adminService.getUnaliasedClubs(page, limit);
   }
 
   @Get('aliases/players')
-  getUnaliasedPlayers(@Query('page') page = '1', @Query('limit') limit = '50') {
-    return this.adminService.getUnaliasedPlayers(parseInt(page), parseInt(limit));
+  getUnaliasedPlayers(
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
+  ) {
+    return this.adminService.getUnaliasedPlayers(page, limit);
   }
 
   @Get('aliases/competitions')

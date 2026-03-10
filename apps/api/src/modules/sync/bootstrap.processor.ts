@@ -62,11 +62,25 @@ export class BootstrapProcessor extends WorkerHost {
     const season = job.data.season as number;
     this.logger.log(`Starting bootstrap for season ${season}`);
 
+    const failures: { leagueId: number; error: string }[] = [];
+
     for (const leagueId of Object.values(LEAGUE_IDS)) {
-      await this.seedLeague(leagueId, season);
+      try {
+        await this.seedLeague(leagueId, season);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        this.logger.error(`Failed to seed league ${leagueId}: ${message}`, err instanceof Error ? err.stack : undefined);
+        failures.push({ leagueId, error: message });
+      }
     }
 
     await this.seedTotalModeCompetition(season);
+
+    if (failures.length > 0) {
+      const failedIds = failures.map((f) => f.leagueId).join(', ');
+      this.logger.error(`Bootstrap completed with ${failures.length} failures: leagues [${failedIds}]`);
+      throw new Error(`Bootstrap failed for leagues: ${failedIds}`);
+    }
 
     this.logger.log('Bootstrap complete');
     return { success: true };
@@ -75,7 +89,6 @@ export class BootstrapProcessor extends WorkerHost {
   private async seedLeague(leagueId: number, season: number) {
     this.logger.log(`Seeding league ${leagueId}`);
 
-    // Upsert Competition
     const leagueData = await this.apiFootball.get<ApiFootballResponse<ApiLeague>>('/leagues', {
       id: leagueId,
       season,
@@ -110,10 +123,7 @@ export class BootstrapProcessor extends WorkerHost {
       },
     });
 
-    // Seed clubs
     await this.seedClubs(leagueId, season);
-
-    // Seed fixtures and gameweeks
     await this.seedFixturesAndGameweeks(leagueId, season);
   }
 
@@ -122,6 +132,11 @@ export class BootstrapProcessor extends WorkerHost {
       league: leagueId,
       season,
     });
+
+    if (!teamsData.response.length) {
+      this.logger.warn(`No teams found for league ${leagueId}`);
+      return;
+    }
 
     for (const item of teamsData.response) {
       await this.prisma.club.upsert({
@@ -138,48 +153,56 @@ export class BootstrapProcessor extends WorkerHost {
         },
       });
 
-      // Seed players for this club
       await this.seedPlayersForClub(item.team.id, leagueId, season);
     }
   }
 
   private async seedPlayersForClub(clubId: number, leagueId: number, season: number) {
-    const playersData = await this.apiFootball.get<ApiFootballResponse<ApiPlayer>>('/players', {
-      team: clubId,
-      season,
-    });
+    let page = 1;
+    let totalPages = 1;
 
-    for (const item of playersData.response) {
-      const stat = item.statistics[0];
-      if (!stat) continue;
-
-      const rawPosition = stat.games.position;
-      const position = POSITION_MAP[rawPosition];
-      if (!position) continue;
-
-      await this.prisma.player.upsert({
-        where: { id: item.player.id },
-        create: {
-          id: item.player.id,
-          realName: item.player.name,
-          position: position as any,
-          clubId,
-          isAvailable: true,
-        },
-        update: {
-          realName: item.player.name,
-          position: position as any,
-          clubId,
-        },
+    do {
+      const playersData = await this.apiFootball.get<ApiFootballResponse<ApiPlayer>>('/players', {
+        team: clubId,
+        season,
+        page,
       });
 
-      // Set initial price for this competition
-      await this.prisma.playerCompetitionPrice.upsert({
-        where: { playerId_competitionId: { playerId: item.player.id, competitionId: leagueId } },
-        create: { playerId: item.player.id, competitionId: leagueId, currentPrice: INITIAL_PLAYER_PRICE },
-        update: {},
-      });
-    }
+      totalPages = playersData.paging?.total ?? 1;
+
+      for (const item of playersData.response) {
+        const stat = item.statistics?.[0];
+        if (!stat) continue;
+
+        const rawPosition = stat.games?.position;
+        const position = POSITION_MAP[rawPosition];
+        if (!position) continue;
+
+        await this.prisma.player.upsert({
+          where: { id: item.player.id },
+          create: {
+            id: item.player.id,
+            realName: item.player.name,
+            position: position as any,
+            clubId,
+            isAvailable: true,
+          },
+          update: {
+            realName: item.player.name,
+            position: position as any,
+            clubId,
+          },
+        });
+
+        await this.prisma.playerCompetitionPrice.upsert({
+          where: { playerId_competitionId: { playerId: item.player.id, competitionId: leagueId } },
+          create: { playerId: item.player.id, competitionId: leagueId, currentPrice: INITIAL_PLAYER_PRICE },
+          update: {},
+        });
+      }
+
+      page++;
+    } while (page <= totalPages);
   }
 
   private async seedFixturesAndGameweeks(leagueId: number, season: number) {
@@ -188,7 +211,12 @@ export class BootstrapProcessor extends WorkerHost {
       season,
     });
 
-    // Group fixtures by round to derive gameweek numbers
+    if (!fixturesData.response.length) {
+      this.logger.warn(`No fixtures found for league ${leagueId}`);
+      return;
+    }
+
+    // Group by round
     const roundMap = new Map<string, ApiFixture[]>();
     for (const f of fixturesData.response) {
       const round = f.league.round;
@@ -196,7 +224,12 @@ export class BootstrapProcessor extends WorkerHost {
       roundMap.get(round)!.push(f);
     }
 
-    const rounds = Array.from(roundMap.keys()).sort();
+    // Sort rounds numerically by the trailing number (e.g. "Regular Season - 10" → 10)
+    const rounds = Array.from(roundMap.keys()).sort((a, b) => {
+      const numA = parseInt(a.split(' - ').pop() ?? '0', 10) || 0;
+      const numB = parseInt(b.split(' - ').pop() ?? '0', 10) || 0;
+      return numA - numB;
+    });
 
     for (let i = 0; i < rounds.length; i++) {
       const round = rounds[i];
@@ -225,19 +258,18 @@ export class BootstrapProcessor extends WorkerHost {
             awayClubId: f.teams.away.id,
             kickoffAt: new Date(f.fixture.date),
             status: f.fixture.status.short,
-            homeGoals: f.goals.home ?? undefined,
-            awayGoals: f.goals.away ?? undefined,
+            homeGoals: f.goals.home,   // null for unplayed fixtures (explicit null, not undefined)
+            awayGoals: f.goals.away,
           },
           update: {
             status: f.fixture.status.short,
-            homeGoals: f.goals.home ?? undefined,
-            awayGoals: f.goals.away ?? undefined,
+            homeGoals: f.goals.home,
+            awayGoals: f.goals.away,
           },
         });
       }
     }
 
-    // Mark first unfinished gameweek as current
     await this.markCurrentGameweek(leagueId);
   }
 

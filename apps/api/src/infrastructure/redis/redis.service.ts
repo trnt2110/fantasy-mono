@@ -23,7 +23,11 @@ export class RedisService implements OnModuleDestroy {
   }
 
   async onModuleDestroy() {
-    await this.client.quit();
+    try {
+      await this.client.quit();
+    } catch (err) {
+      this.logger.warn('Redis quit error during shutdown', err);
+    }
   }
 
   async get(key: string): Promise<string | null> {
