@@ -35,5 +35,4 @@ Thumbs.db
 *.swp
 *.swo
 
-# Prisma
-prisma/migrations/
+# Prisma - migrations ARE tracked (intentionally not ignored)
