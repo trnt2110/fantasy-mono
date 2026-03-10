@@ -171,7 +171,7 @@ FRONTEND_URL=http://localhost:5173
 docker-compose up -d
 
 # 2. Install dependencies
-npm install          # from monorepo root (workspaces)
+pnpm install         # from monorepo root (workspaces)
 
 # 3. Run migrations
 cd apps/api && npx prisma migrate dev

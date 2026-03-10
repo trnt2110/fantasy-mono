@@ -1,47 +1,3 @@
-# Fantasy Football Game — Database Design
-
-> **Living document.** Updated at the end of each implementation phase to reflect what was actually built.
-> Last updated: Phase 0 (refined 2026-03-10)
-
----
-
-## Alias System (Licensing Firewall)
-
-To avoid trademark/licensing issues, all user-facing names for clubs, players, and competitions are admin-managed "in-game" aliases — similar to PES/eFootball's approach (e.g., "Manchester United" → "Manchester Red", "Premier League" → "England Top Flight").
-
-### Design Pattern
-
-Every aliasable entity:
-1. Stores `realName` (internal — used only for API-Football sync matching, **never returned to clients**)
-2. Has a corresponding `*Alias` table storing the admin-managed in-game display name
-3. Resolved via `AliasService.resolveXxx()` before any API response is serialized
-
-### API Response Shape (after alias resolution)
-
-```typescript
-// Club example
-{
-  id: 33,
-  name: "Manchester Red",      // from ClubAlias.name
-  shortName: "MRD",            // from ClubAlias.shortName
-  city: "Manchester",          // from ClubAlias.city
-  logoUrl: "...",              // safe (not a real trademark issue)
-  isAliased: true              // false = admin hasn't set a name yet
-}
-```
-
-### Admin Workflow
-
-1. After `season-bootstrap` seeds real data, admin visits `/admin/aliases`
-2. Dashboard surfaces all un-aliased entities (`isAliased: false`)
-3. Admin sets in-game names one-by-one or via bulk CSV import
-4. Until aliased, entities show as `[Unnamed]` to clients (not leaked to users, not returned in responses for formation purposes without a name)
-
----
-
-## Prisma Schema
-
-```prisma
 generator client {
   provider = "prisma-client-js"
 }
@@ -73,25 +29,24 @@ enum GameweekStatus {
 }
 
 enum CompetitionType {
-  LEAGUE  // one league only; players from that league; natural GW sequence
-  TOTAL   // cross-league; players from any of the 5 leagues; calendar-week GWs
+  LEAGUE
+  TOTAL
 }
 
 enum ChipType {
   WILDCARD
-  // Future: TRIPLE_CAPTAIN | BENCH_BOOST | FREE_HIT
 }
 
 // ─── Football Entities (synced from API-Football) ──────────────────────────
 
 model Competition {
-  id           Int             @id   // API-Football league ID (e.g., 39 for PL); use a sentinel ID (e.g., 0) for Total mode
-  realName     String                // internal only — never returned to clients
+  id           Int             @id
+  realName     String
   country      String
   season       Int
   type         CompetitionType @default(LEAGUE)
-  leagueSlug   String?               // e.g. "premier-league"; null for Total mode
-  gwCount      Int                   // natural season length (PL=38, BL=34, L1=34, SA=38, LL=38; Total=0/dynamic)
+  leagueSlug   String?
+  gwCount      Int
   isActive     Boolean         @default(true)
   alias        CompetitionAlias?
   clubs        Club[]
@@ -105,15 +60,15 @@ model Competition {
 
 model CompetitionAlias {
   competitionId Int     @id
-  name          String   // "England Top Flight"
-  shortName     String?  // "ETF"
+  name          String
+  shortName     String?
   updatedAt     DateTime @updatedAt
   competition   Competition @relation(fields: [competitionId], references: [id])
 }
 
 model Club {
-  id            Int      @id   // API-Football team ID
-  realName      String         // internal only — never returned to clients
+  id            Int      @id
+  realName      String
   logoUrl       String?
   competitionId Int
   competition   Competition @relation(fields: [competitionId], references: [id])
@@ -125,16 +80,16 @@ model Club {
 
 model ClubAlias {
   clubId    Int     @id
-  name      String   // "Manchester Red"
-  shortName String?  // "MRD"
-  city      String?  // "Manchester"
+  name      String
+  shortName String?
+  city      String?
   updatedAt DateTime @updatedAt
   club      Club @relation(fields: [clubId], references: [id])
 }
 
 model Player {
-  id               Int      @id   // API-Football player ID
-  realName         String         // internal only — never returned to clients
+  id               Int      @id
+  realName         String
   position         Position
   clubId           Int
   club             Club @relation(fields: [clubId], references: [id])
@@ -150,7 +105,7 @@ model Player {
 
 model PlayerAlias {
   playerId  Int     @id
-  name      String   // "M. Rashstone"
+  name      String
   updatedAt DateTime @updatedAt
   player    Player @relation(fields: [playerId], references: [id])
 }
@@ -197,7 +152,7 @@ model Gameweek {
 }
 
 model Fixture {
-  id            Int      @id   // API-Football fixture ID
+  id            Int      @id
   competitionId Int
   competition   Competition @relation(fields: [competitionId], references: [id])
   gameweekId    Int
@@ -207,7 +162,7 @@ model Fixture {
   awayClubId    Int
   awayClub      Club @relation("AwayClub", fields: [awayClubId], references: [id])
   kickoffAt     DateTime
-  status        String   // SCHEDULED | LIVE | FINISHED
+  status        String
   homeGoals     Int?
   awayGoals     Int?
   performances  PlayerPerformance[]
@@ -222,7 +177,7 @@ model PlayerPerformance {
   id              Int      @id @default(autoincrement())
   playerId        Int
   player          Player   @relation(fields: [playerId], references: [id])
-  fixtureId       Int?     // null for blank-GW placeholder rows (player's club has no fixture)
+  fixtureId       Int?
   fixture         Fixture? @relation(fields: [fixtureId], references: [id])
   gameweekId      Int
   gameweek        Gameweek @relation(fields: [gameweekId], references: [id])
@@ -239,14 +194,11 @@ model PlayerPerformance {
   saves           Int      @default(0)
   bonus           Int      @default(0)
   totalPoints     Int      @default(0)
-  pointsBreakdown Json                  // { minutes: 2, goals: 10, assists: 3, ... }
+  pointsBreakdown Json
   isFinalised     Boolean  @default(false)
 
-  @@unique([playerId, fixtureId])   // fixture rows: prevents duplicate per player+fixture
+  @@unique([playerId, fixtureId])
   @@index([gameweekId, playerId])
-  // Blank-GW uniqueness (fixtureId IS NULL) cannot be expressed in Prisma.
-  // Add raw SQL partial index in migration:
-  //   CREATE UNIQUE INDEX "pp_blank_gw_unique" ON "PlayerPerformance" ("playerId", "gameweekId") WHERE "fixtureId" IS NULL;
 }
 
 // ─── Users & Auth ──────────────────────────────────────────────────────────
@@ -287,7 +239,7 @@ model FantasyTeam {
   budget        Decimal  @db.Decimal(6, 1) @default(100.0)
   totalValue    Decimal  @db.Decimal(6, 1) @default(0.0)
   formation     String   @default("4-4-2")
-  freeTransfers Int      @default(1)   // tracks banked free transfers (1 or 2)
+  freeTransfers Int      @default(1)
   picks         PlayerPick[]
   transfers     Transfer[]
   scores        GameweekScore[]
@@ -304,10 +256,10 @@ model ChipActivation {
   chip          ChipType
   gameweekId    Int
   gameweek      Gameweek @relation(fields: [gameweekId], references: [id])
-  halfSeason    Int      // 1 = GW1–19; 2 = GW20–38; derived from GW number at activation time
+  halfSeason    Int
   activatedAt   DateTime @default(now())
 
-  @@unique([fantasyTeamId, chip, halfSeason])  // one wildcard per half-season per team
+  @@unique([fantasyTeamId, chip, halfSeason])
   @@index([fantasyTeamId])
 }
 
@@ -322,8 +274,8 @@ model PlayerPick {
   isCaptain     Boolean  @default(false)
   isViceCaptain Boolean  @default(false)
   isStarting    Boolean  @default(true)
-  benchOrder    Int?     // 1–4 for bench; null for starters
-  multiplier    Int      @default(1)  // set to 2 for captain during finalisation
+  benchOrder    Int?
+  multiplier    Int      @default(1)
 
   @@unique([fantasyTeamId, playerId, gameweekId])
   @@index([fantasyTeamId, gameweekId])
@@ -354,19 +306,19 @@ model GameweekScore {
   fantasyTeam   FantasyTeam @relation(fields: [fantasyTeamId], references: [id])
   gameweekId    Int
   gameweek      Gameweek @relation(fields: [gameweekId], references: [id])
-  points        Int      @default(0)  // this GW only (including transfer deductions)
-  totalPoints   Int      @default(0)  // cumulative across all GWs
+  points        Int      @default(0)
+  totalPoints   Int      @default(0)
   rank          Int?
   isFinalised   Boolean  @default(false)
 
   @@unique([fantasyTeamId, gameweekId])
-  @@index([gameweekId, points])   // fast leaderboard ORDER BY
+  @@index([gameweekId, points])
 }
 
 model FantasyLeague {
   id            Int      @id @default(autoincrement())
   name          String
-  code          String   @unique   // 8-char alphanumeric invite code
+  code          String   @unique
   competitionId Int
   competition   Competition @relation(fields: [competitionId], references: [id])
   adminTeamId   String
@@ -388,72 +340,3 @@ model FantasyLeagueMembership {
   @@unique([leagueId, fantasyTeamId])
   @@index([leagueId])
 }
-
-// ─── Cosmetics & Inventory (Phase 2 — placeholder) ─────────────────────────
-//
-// When Phase 2 is implemented, add:
-//   model CosmeticItem   { id, type (EMBLEM|CARD_SKIN|TITLE|KIT|GIF_CHARACTER), name, imageUrl, price, ... }
-//   model UserInventory  { id, userId, cosmeticItemId, acquiredAt, ... }
-//   model EquippedCosmetic { userId, fantasyTeamId?, slot, cosmeticItemId, ... }
-//
-// See game_design.md § Business Model for the full cosmetics list.
-```
-
----
-
-## Key Indexes Summary
-
-| Table | Index | Purpose |
-|---|---|---|
-| `GameweekScore` | `(gameweekId, points)` | Fast leaderboard `ORDER BY` |
-| `PlayerPick` | `(fantasyTeamId, gameweekId)` | Load team picks per GW |
-| `PlayerPerformance` | `UNIQUE(playerId, fixtureId)` | Unique per player+fixture (non-null) |
-| `PlayerPerformance` | `(gameweekId, playerId)` | Aggregate GW performance per team |
-| `PlayerPerformance` | Partial `UNIQUE(playerId, gameweekId) WHERE fixtureId IS NULL` | One blank-GW row per player per GW — raw SQL in migration |
-| `PlayerCompetitionPrice` | `PK(playerId, competitionId)` | Direct current price lookup |
-| `PlayerPriceHistory` | `(playerId, competitionId, changedAt)` | Price history per competition |
-| `ChipActivation` | `UNIQUE(fantasyTeamId, chip, halfSeason)` | One wildcard per half-season |
-| `ChipActivation` | `(fantasyTeamId)` | Load all chips for a team |
-| `Fixture` | `(gameweekId, status)` | Find finished/scheduled fixtures in GW |
-| `Fixture` | `(kickoffAt)` | Cron job: find matches kickoffAt < now()-2h |
-| `Gameweek` | `(competitionId, isCurrent)` | Fast current GW lookup |
-| `Gameweek` | `UNIQUE(competitionId, number)` | Prevent duplicate GW numbers |
-| `RefreshToken` | `(userId, revoked)` | Find valid tokens for user |
-| `Transfer` | `(fantasyTeamId, gameweekId)` | Load GW transfers for accounting |
-
----
-
-## Migration Strategy
-
-- **Dev**: `npx prisma migrate dev --name <description>` — creates migration file + applies it
-- **Prod**: `npx prisma migrate deploy` — applies all pending migrations (no interactive prompts)
-- **Rule**: Never edit applied migration files; always create new ones
-- **Naming convention**: `YYYYMMDD_description` (Prisma auto-timestamps)
-
----
-
-## Soft Delete Policy
-
-| Entity | Policy |
-|---|---|
-| Player | `isAvailable = false` — never hard-deleted; existing picks preserved |
-| Fixture | Never deleted; `status` field tracks lifecycle |
-| Gameweek | Never deleted; `status` field tracks lifecycle |
-| User | Soft delete not implemented in MVP (admin can manually deactivate) |
-| FantasyTeam | Never deleted; preserves historical GameweekScore data |
-
----
-
-## Open Questions Resolved
-
-| Question | Decision |
-|---|---|
-| Multi-season support | `@@unique([userId, competitionId])` is correct for now — different seasons are different Competition records (new `season` field); if we ever need same competitionId across seasons, revisit |
-| PlayerPerformance for 0-minute players | YES — always write a row (with minutesPlayed=0) for all squad members in each fixture; needed for auto-sub logic during finalisation |
-| Blank-GW PlayerPerformance | `fixtureId` is nullable; blank-GW rows have `fixtureId = null`; uniqueness enforced by partial SQL index `UNIQUE(playerId, gameweekId) WHERE fixtureId IS NULL` (add in migration) |
-| Deadline time rule | Auto-set: `deadlineTime = MIN(fixture.kickoffAt in GW) - 90 minutes`; seeded by bootstrap job |
-| Retired players | `isAvailable = false`; picks preserved; transfer away is free at current price |
-| Independent price markets | `PlayerCompetitionPrice(playerId, competitionId)` stores current price per competition; `PlayerPriceHistory` also scoped by `competitionId`; price change jobs operate per competition |
-| Chip tracking | `ChipActivation` table; `@@unique([fantasyTeamId, chip, halfSeason])` enforces one wildcard per half (halfSeason=1 for GW1–19, halfSeason=2 for GW20–38); DB constraint prevents double use |
-| Club–Competition in Total mode | Clubs are scoped to their real competition; Total mode selects players from any club regardless of `competitionId`; `Competition(type=TOTAL).clubs` is empty by design |
-| FantasyTeam.formation | Stores current formation only (overwritten each GW); no per-GW formation history |

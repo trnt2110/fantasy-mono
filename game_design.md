@@ -7,11 +7,48 @@
 
 ## Format
 
-Season-long FPL-style. One team per user per competition. Points accumulate across all gameweeks (GW1–GW38 per competition). No in-season live updates — scoring is post-match only.
+Season-long FPL-style. One team per user per competition. Points accumulate across all gameweeks. No in-season live updates — scoring is post-match only.
+
+---
+
+## Competition Types
+
+Two distinct competition types exist within the same product:
+
+| Attribute | League Mode | Total Mode |
+|---|---|---|
+| **Squad scope** | Players from one league only | Players from any of the 5 leagues |
+| **Teams per user** | Up to 5 (one per league) | 1 |
+| **GW structure** | League's natural GW sequence | Calendar week (Mon–Sun) |
+| **GW deadline** | 90 min before earliest fixture of that league's GW | 90 min before earliest fixture across all active leagues that week |
+| **Season length** | PL=38, BL=34, L1=34, SA=38, LL=38 | Runs concurrent with all leagues |
+| **Budget** | 100.0m | 100.0m |
+| **Price market** | Independent per competition | Independent (Total mode has its own market) |
+
+**6 global leaderboards:** one per league (5) + one for Total mode (1).
+
+**Mini-leagues** are scoped per competition — users join with an invite code within the same competition type.
+
+---
+
+## Season Structure
+
+| League | Natural GW Count | Notes |
+|---|---|---|
+| Premier League | 38 | — |
+| Bundesliga | 34 | — |
+| Ligue 1 | 34 | — |
+| Serie A | 38 | — |
+| La Liga | 38 | — |
+| Total mode | N/A | Calendar weeks (Mon–Sun); new GW each week during active season |
+
+Total mode GW deadline = `MIN(kickoffAt across all active leagues that week) − 90 minutes`.
 
 ---
 
 ## Squad Composition
+
+> Same rules apply to both League mode and Total mode.
 
 | Attribute | Value |
 |---|---|
@@ -58,6 +95,7 @@ Season-long FPL-style. One team per user per competition. Points accumulate acro
 | Bonus (1st/2nd/3rd) | 3/2/1 | 3/2/1 | 3/2/1 | 3/2/1 |
 
 ### Scoring Notes
+- **Domestic league matches only.** Cup ties (FA Cup, DFB-Pokal, Coppa Italia, etc.), UCL, UEL, and international fixtures are excluded — they do not contribute points.
 - **Clean sheet** requires the player to have played ≥ 60 minutes in the match
 - **Goals conceded** deduction applies per 2 goals (floor division — 3 conceded = −1, not −1.5)
 - **Bonus points**: awarded post-match per API-Football's BPS data; 0, 1, 2, or 3 points possible
@@ -140,16 +178,44 @@ Triggered during gameweek finalisation for starting players who played 0 minutes
 - Changes applied by `player-price-update` BullMQ job after `gameweek-finalise` completes
 - Price floor: 4.0m | Price ceiling: 15.0m
 - `PlayerPriceHistory` row written on each change
+- **Each competition maintains an independent price market.** Transfer activity in League mode (e.g. PL competition) does not affect Total mode prices, and vice versa. Each of the 6 competitions calculates price changes from transfer volume within that competition only.
 
 ---
 
 ## Mini-Leagues
 
 - Users create a private league → unique 8-character alphanumeric invite code generated
-- Others join via invite code (must have a fantasy team in the same competition)
+- Others join via invite code (must have a fantasy team in the **same competition**)
+- Mini-leagues are scoped per competition — a PL league can only include PL fantasy teams; a Total mode league can only include Total mode teams
 - Standings: cumulative total points, descending; rank recalculated after each GW finalisation
 - Standings visible to members only
-- **Global leaderboard:** all fantasy teams in a competition; same ranking logic; paginated
+- **Global leaderboards:** 6 total — one per league competition (5) + one for Total mode (1); all fantasy teams in that competition; same ranking logic; paginated
+
+---
+
+## Business Model
+
+Three-stage monetization roadmap:
+
+| Stage | Feature | Notes |
+|---|---|---|
+| **1 — Launch** | Ad-supported | Non-intrusive ads; covers infrastructure costs |
+| **2 — Phase 2** | In-game cosmetics (purchasable) | See list below |
+| **3 — Phase 3** | Prize pool mini-leagues | Paid-entry private leagues with prize distribution |
+
+### Cosmetics (Phase 2)
+
+- **Team emblem/badge** — custom icon displayed on team page and leaderboard
+- **Player card skin** — visual style applied to player cards in pitch view
+- **Profile title** — e.g. "Gaffer", "Tactician", "The Gaffer" (shown next to username)
+- **Team kit/jersey color** — color scheme for the team's formation pitch view
+- **Animated GIF character** — Gunbound-style character shown on profile and team page
+
+---
+
+## Visual Identity
+
+Casual, funny, cartoonish vibe — not a serious sports simulation. The alias system (fake club/player names) enables a distinctive in-game world. Animated GIF characters alongside team emblems are a core cosmetics feature that reinforces this tone. Design decisions should prioritize personality over realism.
 
 ---
 

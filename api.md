@@ -1,7 +1,7 @@
 # Fantasy Football Game — API Design
 
 > **Living document.** Updated at the end of each implementation phase to reflect what was actually built.
-> Last updated: Phase 0 (bootstrap)
+> Last updated: Phase 0 (refined 2026-03-10)
 
 ---
 
@@ -53,8 +53,23 @@
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| GET | `/users/me` | JWT | Get current user profile (id, email, username, role) |
+| GET | `/users/me` | JWT | Get current user profile |
 | PATCH | `/users/me` | JWT | Update username |
+
+**`PATCH /users/me` body:**
+```json
+{ "username": "new_username" }
+```
+
+**`GET /users/me` response:**
+```json
+{
+  "id": "uuid",
+  "email": "user@example.com",
+  "username": "Gaffer99",
+  "role": "USER"
+}
+```
 
 ---
 
@@ -65,6 +80,25 @@
 | GET | `/competitions` | Public | List active competitions (alias-resolved names) |
 | GET | `/competitions/:id/gameweeks` | Public | Gameweeks with deadlines and statuses |
 
+**`GET /competitions` response shape (per entry):**
+```json
+{
+  "id": 39,
+  "name": "England Top Flight",
+  "shortName": "ETF",
+  "country": "England",
+  "type": "LEAGUE",           // "LEAGUE" | "TOTAL"
+  "leagueSlug": "premier-league",  // null for type=TOTAL
+  "gwCount": 38,              // natural season GW count; 0 for Total mode (calendar-week based)
+  "season": 2025,
+  "isAliased": true
+}
+```
+
+**Total mode** has a sentinel `id` (e.g., `0`); `type="TOTAL"`; `leagueSlug=null`.
+
+**Total mode GW deadline logic:** `deadlineTime = MIN(kickoffAt across all active leagues that week) − 90 minutes`. Recalculated each calendar week when Total mode gameweeks are seeded.
+
 ---
 
 ### Clubs (`/clubs`)
@@ -73,17 +107,79 @@
 |---|---|---|---|---|
 | GET | `/clubs` | Public | `?competitionId=` | List clubs in a competition (alias-resolved) |
 
+**Response shape (per entry):**
+```json
+{
+  "id": 33,
+  "name": "Manchester Red",
+  "shortName": "MRD",
+  "city": "Manchester",
+  "logoUrl": "...",
+  "isAliased": true
+}
+```
+
+> Note: Total mode (`type=TOTAL`) has no clubs of its own. To list clubs available in Total mode, query each of the 5 league competitions separately.
+
 ---
 
 ### Players (`/players`)
 
 | Method | Path | Auth | Query | Description |
 |---|---|---|---|---|
-| GET | `/players` | Public | `?competitionId=&position=&clubId=&minPrice=&maxPrice=&search=&page=&limit=` | Paginated player list |
-| GET | `/players/:id` | Public | — | Player detail + current price + ownership % |
+| GET | `/players` | Public | `?competitionId=&position=&clubId=&minPrice=&maxPrice=&search=&page=&limit=` | Paginated player list with competition-scoped prices |
+| GET | `/players/:id` | Public | `?competitionId=` | Player detail + competition-scoped price + ownership % |
 | GET | `/players/:id/performances` | Public | `?competitionId=` | GW-by-GW performance history with points breakdown |
 
-**Ownership %** = count of FantasyTeams picking this player / total FantasyTeams in competition × 100
+**`?competitionId=` is required** on all player endpoints to return the correct competition-scoped price (stored in `PlayerCompetitionPrice`). For Total mode, pass the Total mode competition ID.
+
+**`GET /players` response shape (per entry):**
+```json
+{
+  "id": 42,
+  "name": "M. Rashstone",
+  "position": "FWD",
+  "clubId": 33,
+  "clubName": "Manchester Red",
+  "currentPrice": 12.5,       // from PlayerCompetitionPrice for the requested competition
+  "isAvailable": true,
+  "isAliased": true
+}
+```
+
+**`GET /players/:id` response shape:**
+```json
+{
+  "id": 42,
+  "name": "M. Rashstone",
+  "position": "FWD",
+  "clubId": 33,
+  "clubName": "Manchester Red",
+  "currentPrice": 12.5,       // competition-scoped
+  "ownershipPct": 34.2,       // count(picks in competition) / total teams × 100
+  "isAvailable": true,
+  "isAliased": true
+}
+```
+
+**Ownership %** = count of FantasyTeams picking this player in the competition / total FantasyTeams in that competition × 100.
+
+**`GET /players/:id/performances` response shape (per entry):**
+```json
+{
+  "gameweekId": 5,
+  "gameweekNumber": 5,
+  "fixtureId": 101,
+  "minutesPlayed": 90,
+  "goalsScored": 1,
+  "assists": 0,
+  "cleanSheet": false,
+  "bonus": 2,
+  "totalPoints": 12,
+  "pointsBreakdown": { "minutes": 2, "goals": 5, "bonus": 2, "assists": 3 },
+  "isFinalised": true
+}
+```
 
 ---
 
@@ -93,6 +189,18 @@
 |---|---|---|---|---|
 | GET | `/gameweeks/current` | Public | `?competitionId=` | Current active GW + deadline time |
 
+**Response shape:**
+```json
+{
+  "id": 12,
+  "competitionId": 39,
+  "number": 12,
+  "deadlineTime": "2025-11-02T11:30:00Z",
+  "status": "SCHEDULED",   // SCHEDULED | ACTIVE | SCORING | FINISHED
+  "isCurrent": true
+}
+```
+
 ---
 
 ### Fixtures (`/fixtures`)
@@ -100,29 +208,73 @@
 | Method | Path | Auth | Query | Description |
 |---|---|---|---|---|
 | GET | `/fixtures` | Public | `?gameweekId=` | All fixtures for a gameweek |
-| GET | `/fixtures` | Public | `?clubId=` | Upcoming fixtures for a club |
+| GET | `/fixtures` | Public | `?clubId=&upcoming=true` | Upcoming fixtures for a club |
+
+**Response shape (per entry):**
+```json
+{
+  "id": 101,
+  "gameweekId": 12,
+  "homeClubId": 33,
+  "homeClubName": "Manchester Red",
+  "awayClubId": 40,
+  "awayClubName": "The Citizens",
+  "kickoffAt": "2025-11-02T13:00:00Z",
+  "status": "SCHEDULED",
+  "homeGoals": null,
+  "awayGoals": null
+}
+```
 
 ---
 
 ### Fantasy Teams (`/fantasy-teams`)
 
-| Method | Path | Auth | Description |
+| Method | Path | Auth | Query/Description |
 |---|---|---|---|
 | POST | `/fantasy-teams` | JWT | Create team — validates 15 players, budget ≤ 100.0, position limits, ≤ 3 per club |
-| GET | `/fantasy-teams/mine` | JWT | `?competitionId=` — get my team |
-| GET | `/fantasy-teams/:id` | JWT | Get any team (alias-resolved names, no private info) |
+| GET | `/fantasy-teams/mine` | JWT | `?competitionId=` — get my team for a competition |
+| GET | `/fantasy-teams/:id` | JWT | Get any team by ID (alias-resolved names, no private info) |
+| GET | `/fantasy-teams/:id/scores` | JWT | GW-by-GW score history for a team |
 
-**Create team request body:**
+**`POST /fantasy-teams` request body:**
 ```json
 {
   "competitionId": 39,
   "name": "My Team Name",
-  "playerIds": [1, 2, 3, ...],  // exactly 15 player IDs
+  "playerIds": [1, 2, 3, ...],   // exactly 15 player IDs
   "formation": "4-4-2",
-  "startingIds": [1, 2, ...],   // exactly 11 from playerIds
+  "startingIds": [1, 2, ...],    // exactly 11 from playerIds
   "captainId": 5,
   "viceCaptainId": 3,
-  "benchOrder": { "12": 1, "7": 2, "9": 3, "4": 4 }  // playerId → bench position
+  "benchOrder": { "12": 1, "7": 2, "9": 3, "4": 4 }  // playerId → bench position (1–4)
+}
+```
+
+**`GET /fantasy-teams/:id` response shape:**
+```json
+{
+  "id": "uuid",
+  "userId": "uuid",
+  "username": "Gaffer99",
+  "competitionId": 39,
+  "name": "My Team Name",
+  "budget": 3.5,
+  "totalValue": 96.5,
+  "formation": "4-4-2",
+  "freeTransfers": 1
+}
+```
+
+**`GET /fantasy-teams/:id/scores` response shape (per entry):**
+```json
+{
+  "gameweekId": 5,
+  "gameweekNumber": 5,
+  "points": 62,
+  "totalPoints": 312,
+  "rank": 14,
+  "isFinalised": true
 }
 ```
 
@@ -130,14 +282,14 @@
 
 ### Picks (`/picks`)
 
-| Method | Path | Auth | Description |
+| Method | Path | Auth | Query/Description |
 |---|---|---|---|
 | PUT | `/picks/:gameweekId` | JWT | Submit GW picks snapshot; blocked by `GameweekOpenGuard` after deadline |
-| GET | `/picks/:gameweekId` | JWT | Get my picks for a GW |
+| GET | `/picks/:gameweekId` | JWT | `?fantasyTeamId=` — get picks for a specific team in a GW |
 
 **GameweekOpenGuard:** Returns `403 Forbidden` if `Gameweek.deadlineTime < now()` or `Gameweek.status !== SCHEDULED | ACTIVE`.
 
-**PUT body:**
+**`PUT /picks/:gameweekId` body:**
 ```json
 {
   "fantasyTeamId": "uuid",
@@ -148,16 +300,32 @@
 }
 ```
 
+**`GET /picks/:gameweekId?fantasyTeamId=` response shape (per player):**
+```json
+{
+  "playerId": 42,
+  "playerName": "M. Rashstone",
+  "position": "FWD",
+  "clubName": "Manchester Red",
+  "isStarting": true,
+  "isCaptain": false,
+  "isViceCaptain": true,
+  "benchOrder": null,
+  "multiplier": 1,
+  "gwPoints": 12           // null until GW is finalised
+}
+```
+
 ---
 
 ### Transfers (`/transfers`)
 
-| Method | Path | Auth | Description |
+| Method | Path | Auth | Query/Description |
 |---|---|---|---|
 | POST | `/transfers` | JWT | Execute transfer; blocked after deadline |
-| GET | `/transfers` | JWT | `?gameweekId=` — my transfers for a GW |
+| GET | `/transfers` | JWT | `?fantasyTeamId=&gameweekId=` — transfers for a team in a GW |
 
-**POST body:**
+**`POST /transfers` body:**
 ```json
 {
   "fantasyTeamId": "uuid",
@@ -174,8 +342,10 @@
 4. Validate budget: `budget + playerOut.currentPrice - playerIn.currentPrice >= 0`
 5. Validate max 3 per club after swap
 6. Validate position slot preserved (GK in for GK, etc.)
-7. Execute in Prisma transaction: update budget, create Transfer row, update PlayerPick squad
-8. Calculate `pointsDeducted`: max(0, (transferCount - freeTransfers) × 4)
+7. Execute in Prisma transaction: update `FantasyTeam.budget`, create `Transfer` row, update squad `PlayerPick` rows
+8. Calculate `pointsDeducted`: `max(0, (gwTransferCount - freeTransfers) × 4)`
+
+**Wildcard activation** (`activateWildcard: true`): sets `Transfer.isWildcard = true`; retroactively zeroes `pointsDeducted` for all transfers in the same GW; creates `ChipActivation` row.
 
 ---
 
@@ -183,9 +353,21 @@
 
 | Method | Path | Auth | Query | Description |
 |---|---|---|---|---|
-| GET | `/leaderboard/global` | Public | `?competitionId=&gameweekId=&page=&limit=` | Global standings (cached 5min) |
+| GET | `/leaderboard/global` | Public | `?competitionId=&gameweekId=&page=&limit=` | Global standings (cached 5 min) |
 
-**Response** includes rank, team name, manager username, GW points, total points per entry.
+**Response shape (per entry):**
+```json
+{
+  "rank": 1,
+  "fantasyTeamId": "uuid",
+  "teamName": "My Team Name",
+  "username": "Gaffer99",
+  "gwPoints": 62,
+  "totalPoints": 312
+}
+```
+
+If `gameweekId` is omitted, returns current GW standings. `gwPoints` reflects the specified GW; `totalPoints` is always cumulative.
 
 ---
 
@@ -194,9 +376,51 @@
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | POST | `/fantasy-leagues` | JWT | Create private league (generates invite code) |
-| POST | `/fantasy-leagues/join` | JWT | `{ code }` — join by invite code |
+| POST | `/fantasy-leagues/join` | JWT | Join by invite code |
 | GET | `/fantasy-leagues/mine` | JWT | List my leagues |
-| GET | `/fantasy-leagues/:id/standings` | JWT (member) | League standings `?gameweekId=` |
+| GET | `/fantasy-leagues/:id/standings` | JWT (member) | League standings; 403 for non-members |
+
+**`POST /fantasy-leagues` body:**
+```json
+{
+  "name": "Office Rivals",
+  "competitionId": 39,
+  "fantasyTeamId": "uuid"   // creator's fantasy team; must be in the same competition
+}
+```
+
+**`POST /fantasy-leagues` response:**
+```json
+{
+  "id": 7,
+  "name": "Office Rivals",
+  "code": "AB3X9KQR",       // 8-char alphanumeric invite code
+  "competitionId": 39
+}
+```
+
+**`POST /fantasy-leagues/join` body:**
+```json
+{
+  "code": "AB3X9KQR",
+  "fantasyTeamId": "uuid"   // must be in the same competition as the league
+}
+```
+
+**`GET /fantasy-leagues/:id/standings` query:** `?gameweekId=` (optional)
+
+**Standings response (per entry):**
+```json
+{
+  "rank": 1,
+  "fantasyTeamId": "uuid",
+  "teamName": "My Team Name",
+  "username": "Gaffer99",
+  "gwPoints": 62,
+  "totalPoints": 312,
+  "joinedAt": "2025-08-01T09:00:00Z"
+}
+```
 
 ---
 
@@ -224,7 +448,7 @@ Every module that returns football entities MUST call `AliasService` before seri
 return player;
 
 // CORRECT — always do this
-return this.aliasService.resolvePlayer(player);
+return this.aliasService.resolvePlayer(player, competitionId);
 
 // resolvePlayer output:
 {
@@ -232,7 +456,8 @@ return this.aliasService.resolvePlayer(player);
   name: "M. Rashstone",    // alias.name ?? '[Unnamed]'
   position: "FWD",
   clubId: 33,
-  currentPrice: 12.5,
+  clubName: "Manchester Red",
+  currentPrice: 12.5,      // from PlayerCompetitionPrice for the given competition
   isAvailable: true,
   isAliased: true           // false = no alias set yet
 }
@@ -271,10 +496,10 @@ return this.aliasService.resolvePlayer(player);
   → invalidate Redis leaderboard cache keys
 
 [player-price-update job] concurrency: 1
-  → calculate net transfer delta per player since last GW
-  → threshold: net_in > 2% of total teams → +0.1m; net_out > 2% → -0.1m
+  → calculate net transfer delta per player per competition since last GW
+  → threshold: net_in > 2% of total teams in that competition → +0.1m; net_out > 2% → -0.1m
   → clamp to [4.0, 15.0]
-  → upsert Player.currentPrice + write PlayerPriceHistory
+  → upsert PlayerCompetitionPrice.currentPrice + write PlayerPriceHistory row
   → invalidate Redis players:list cache keys
 ```
 
@@ -304,7 +529,7 @@ Response caching:
 | Key Pattern | TTL | Invalidated by |
 |---|---|---|
 | `players:list:{sha256(filters)}` | 5 min | player-price-update job |
-| `players:{id}` | 10 min | performance-sync job |
+| `players:{id}:{competitionId}` | 10 min | performance-sync job |
 | `fixtures:gw:{gameweekId}` | 30 min | fixture-result-check job |
 | `gameweek:current:{competitionId}` | 2 min | fixture-result-check job |
 | `leaderboard:global:{compId}:{gwId}:{page}` | 5 min | gameweek-finalise job |

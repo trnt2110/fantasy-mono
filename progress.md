@@ -8,8 +8,8 @@
 
 | Phase | Status | Branch | Notes |
 |---|---|---|---|
-| **Phase 0** — Documentation Bootstrap | ✅ Done | feature/fantasy-game | All 5 design docs created |
-| **Phase 1** — Foundation | 🔲 Not started | — | Monorepo, auth, prisma, api-football client, alias system |
+| **Phase 0** — Documentation Bootstrap | ✅ Done | feature/fantasy-game | All 5 design docs created; design decisions updated 2026-03-10 |
+| **Phase 1** — Foundation | ✅ Done | feature/fantasy-game | Monorepo (pnpm), auth, prisma, api-football client, alias system |
 | **Phase 2** — Core Game Logic | 🔲 Not started | — | Squads, picks, transfers, scoring |
 | **Phase 3** — Sync Pipeline + Leaderboard | 🔲 Not started | — | BullMQ jobs, leaderboard, mini-leagues |
 | **Phase 4** — Frontend | 🔲 Not started | — | React SPA |
@@ -19,7 +19,7 @@
 
 ## Phase 0 — Documentation Bootstrap ✅
 
-**Completed:** 2026-03-09
+**Completed:** 2026-03-10 (refined from 2026-03-09)
 
 Files created:
 - [x] `game_design.md` — game rules, scoring, transfers, chips, edge cases
@@ -34,28 +34,42 @@ Open design questions resolved in docs:
 - Price change threshold: 2% of active teams triggers ±0.1m
 - Multi-season: `@@unique([userId, competitionId])` is correct (new season = new Competition record)
 - Soft delete: `isAvailable = false` for players; fixtures/gameweeks never deleted
+- Blank-GW PlayerPerformance: `fixtureId = null`; uniqueness enforced via raw SQL partial index in migration
+- Independent price markets: `PlayerCompetitionPrice(playerId, competitionId)` — each competition has its own market
+- Wildcard chip tracking: `ChipActivation.halfSeason` (1 or 2) + `@@unique([fantasyTeamId, chip, halfSeason])`
+- Total mode clubs: `Competition(type=TOTAL).clubs` is empty; total mode selects from all 5 leagues' clubs
+
+Docs reviewed and confirmed consistent: 2026-03-10
 
 ---
 
-## Phase 1 — Foundation 🔲
+## Phase 1 — Foundation ✅
+
+**Completed:** 2026-03-10
 
 **Goal:** Runnable monorepo with auth, database, and API-Football client.
 
 Tasks:
-- [ ] 1. Init monorepo (npm workspaces), docker-compose.yml, .env.example
-- [ ] 2. `packages/shared` — scoring constants, leagues constants, game constants, shared TS types
-- [ ] 3. NestJS bootstrap — ConfigModule, PrismaService, RedisService; run `prisma migrate dev`
-- [ ] 4. AuthModule — register (bcrypt), login (JWT + refresh), refresh, logout
-- [ ] 5. ApiFootballClient — rate limiting via Redis + response cache (TTL 60min)
-- [ ] 6. SyncModule bootstrap job — seed Competition, Club, Player, Fixture, Gameweek
-- [ ] 7. AliasModule + AdminModule — resolveClub/Player/Competition(); `/admin/aliases` CRUD
+- [x] 1. Init monorepo (pnpm workspaces), docker-compose.yml, .env.example
+- [x] 2. `packages/shared` — scoring constants, leagues constants, game constants, shared TS types
+- [x] 3. NestJS bootstrap — ConfigModule, PrismaService, RedisService; `prisma migrate dev`
+- [x] 4. AuthModule — register (bcryptjs), login (JWT + refresh), refresh, logout
+- [x] 5. ApiFootballClient — rate limiting via Redis + response cache (TTL 60min)
+- [x] 6. SyncModule bootstrap job — seed Competition, Club, Player, Fixture, Gameweek
+- [x] 7. AliasModule + AdminModule — resolveClub/Player/Competition(); `/admin/aliases` CRUD
 
 **Verification checklist:**
-- [ ] `docker-compose up` → Postgres + Redis running
-- [ ] `npx prisma migrate dev` → all tables created
-- [ ] POST /auth/register + /auth/login → JWT received
-- [ ] POST /admin/sync/bootstrap (with ADMIN jwt) → seed data created
-- [ ] GET /admin/aliases → shows un-aliased entities
+- [x] `docker compose up -d` → Postgres (existing) + Redis running
+- [x] `pnpm exec prisma migrate dev` → all tables + partial index created
+- [x] POST /auth/register + /auth/login → JWT + refreshToken received
+- [ ] POST /admin/sync/bootstrap (with ADMIN jwt) → seed data created (requires API_FOOTBALL_KEY)
+- [x] GET /admin/aliases → 403 without ADMIN role (auth + RBAC guards confirmed working)
+
+Implementation notes:
+- Used **pnpm** workspaces instead of npm (faster, `pnpm-workspace.yaml`)
+- Used **bcryptjs** (pure JS) instead of bcrypt (no prebuilt native bindings for Node 25)
+- Postgres port 5432 was already in use by a pre-existing container; `fantasy` DB created in it
+- Blank-GW partial index added to migration SQL: `CREATE UNIQUE INDEX pp_blank_gw_unique ON PlayerPerformance (playerId, gameweekId) WHERE fixtureId IS NULL`
 
 ---
 
@@ -152,3 +166,9 @@ None currently.
 | 2026-03-09 | npm workspaces monorepo | Simplest setup; shared types between API and frontend |
 | 2026-03-09 | BullMQ over cron-only | Retry logic, concurrency control, job visibility for sync pipeline |
 | 2026-03-09 | PlayerPerformance for 0-min players | Required for auto-sub finalisation logic |
+| 2026-03-10 | Two competition types: LEAGUE + TOTAL | League mode = per-league squad + natural GW sequence; Total mode = cross-league squad + calendar-week GWs; 6 global leaderboards total |
+| 2026-03-10 | Scoring scope: domestic leagues only | Cups, UCL, UEL, and internationals excluded from points calculation |
+| 2026-03-10 | Independent price markets per competition | Transfer volume in one competition (e.g. PL) does not affect prices in another (e.g. Total mode) |
+| 2026-03-10 | Business model: ads → cosmetics → prize mini-leagues | Stage 1: ad-supported launch; Stage 2: purchasable cosmetics (emblem, card skin, title, kit, GIF character); Stage 3: paid-entry prize mini-leagues |
+| 2026-03-10 | Target audience: existing FPL players | Users who want FPL-equivalent for La Liga / Serie A / Bundesliga / Ligue 1, plus a novel cross-league Total mode |
+| 2026-03-10 | Visual identity: casual/cartoonish/funny | Not a serious sports sim; alias system enables in-game personality; animated GIF characters are a core cosmetics feature |

@@ -35,7 +35,7 @@ Season-long FPL-style fantasy football game covering the top 5 European leagues 
 docker-compose up -d                          # Start Postgres + Redis
 
 # From monorepo root
-npm install                                   # Install all workspaces
+pnpm install                                  # Install all workspaces
 
 # Database (from apps/api/)
 npx prisma migrate dev --name <description>   # Create + apply migration
