@@ -22,6 +22,7 @@ export interface ResolvedPlayer {
   position: string;
   clubId: number;
   clubName?: string;
+  currentPrice?: number;
   isAvailable: boolean;
   isAliased: boolean;
 }
@@ -33,6 +34,7 @@ export interface ResolvedCompetition {
   country: string;
   season: number;
   type: string;
+  leagueSlug?: string;
   gwCount: number;
   isActive: boolean;
   isAliased: boolean;
@@ -54,13 +56,14 @@ export class AliasService {
     };
   }
 
-  resolvePlayer(player: PlayerWithAlias): ResolvedPlayer {
+  resolvePlayer(player: PlayerWithAlias, currentPrice?: number): ResolvedPlayer {
     return {
       id: player.id,
       name: player.alias?.name ?? '[Unnamed]',
       position: player.position,
       clubId: player.clubId,
       clubName: player.club ? this.resolveClub(player.club).name : undefined,
+      currentPrice,
       isAvailable: player.isAvailable,
       isAliased: !!player.alias,
     };
@@ -74,6 +77,7 @@ export class AliasService {
       country: competition.country,
       season: competition.season,
       type: competition.type,
+      leagueSlug: competition.leagueSlug ?? undefined,
       gwCount: competition.gwCount,
       isActive: competition.isActive,
       isAliased: !!competition.alias,

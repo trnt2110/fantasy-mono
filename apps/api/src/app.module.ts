@@ -11,6 +11,15 @@ import { AliasModule } from './modules/alias/alias.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { SyncModule } from './modules/sync/sync.module';
 import { ApiFootballModule } from './infrastructure/api-football/api-football.module';
+import { CompetitionsModule } from './modules/competitions/competitions.module';
+import { ClubsModule } from './modules/clubs/clubs.module';
+import { PlayersModule } from './modules/players/players.module';
+import { FixturesModule } from './modules/fixtures/fixtures.module';
+import { GameweeksModule } from './modules/gameweeks/gameweeks.module';
+import { FantasyTeamsModule } from './modules/fantasy-teams/fantasy-teams.module';
+import { PicksModule } from './modules/picks/picks.module';
+import { TransfersModule } from './modules/transfers/transfers.module';
+import { ScoringModule } from './modules/scoring/scoring.module';
 
 @Module({
   imports: [
@@ -22,6 +31,15 @@ import { ApiFootballModule } from './infrastructure/api-football/api-football.mo
     AliasModule,
     AdminModule,
     SyncModule,
+    CompetitionsModule,
+    ClubsModule,
+    PlayersModule,
+    FixturesModule,
+    GameweeksModule,
+    FantasyTeamsModule,
+    PicksModule,
+    TransfersModule,
+    ScoringModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
