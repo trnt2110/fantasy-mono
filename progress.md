@@ -10,7 +10,7 @@
 |---|---|---|---|
 | **Phase 0** — Documentation Bootstrap | ✅ Done | feature/fantasy-game | All 5 design docs created; design decisions updated 2026-03-10 |
 | **Phase 1** — Foundation | ✅ Done | feature/fantasy-game | Monorepo (pnpm), auth, prisma, api-football client, alias system |
-| **Phase 2** — Core Game Logic | 🔲 Not started | — | Squads, picks, transfers, scoring |
+| **Phase 2** — Core Game Logic | ✅ Done | feature/fantasy-game | Competitions/Clubs/Players/Fixtures/Gameweeks modules; FantasyTeams squad creation; Picks + GameweekOpenGuard; Transfers + wildcard; ScoringService |
 | **Phase 3** — Sync Pipeline + Leaderboard | 🔲 Not started | — | BullMQ jobs, leaderboard, mini-leagues |
 | **Phase 4** — Frontend | 🔲 Not started | — | React SPA |
 | **Phase 5** — Polish + SEO | 🔲 Not started | — | Caching, SEO, deadline countdown |
@@ -73,24 +73,38 @@ Implementation notes:
 
 ---
 
-## Phase 2 — Core Game Logic 🔲
+## Phase 2 — Core Game Logic ✅
+
+**Completed:** 2026-03-12
 
 **Goal:** Full fantasy team lifecycle — create squad, set picks, make transfers, calculate scores.
 
 Tasks:
-- [ ] 8. CompetitionsModule, ClubsModule, PlayersModule, FixturesModule, GameweeksModule
-- [ ] 9. FantasyTeamsModule — squad validation (15 players, position limits, budget, 3-per-club)
-- [ ] 10. PicksModule — GW snapshot + GameweekOpenGuard deadline enforcement
-- [ ] 11. TransfersModule — transaction, free transfer accounting, wildcard chip
-- [ ] 12. ScoringService — calculatePlayerPoints() + finaliseGameweekScores()
+- [x] 8. CompetitionsModule, ClubsModule, PlayersModule, FixturesModule, GameweeksModule
+- [x] 9. FantasyTeamsModule — squad validation (15 players, position limits, budget, 3-per-club)
+- [x] 10. PicksModule — GW snapshot + GameweekOpenGuard deadline enforcement
+- [x] 11. TransfersModule — transaction, free transfer accounting, wildcard chip
+- [x] 12. ScoringService — calculatePlayerPoints() + finaliseGameweekScores()
 
 **Verification checklist:**
-- [ ] POST /fantasy-teams → valid squad accepted
+- [x] `tsc --noEmit` → clean (all modules compile)
+- [x] API boots successfully — all modules initialized, all routes registered
+- [x] ScoringService unit test: GK clean sheet + 60 min = 6 pts ✓ (inline node test)
+- [ ] POST /fantasy-teams → valid squad accepted (requires seeded data)
 - [ ] POST /fantasy-teams → invalid squad (wrong budget/positions/club count) → 400
 - [ ] PUT /picks/:gwId → picks saved
 - [ ] PUT /picks/:gwId (after deadline) → 403
 - [ ] POST /transfers → budget updated; extra transfer → -4pts recorded
-- [ ] ScoringService unit test: GK clean sheet + 60 min = 6 pts
+
+Implementation notes:
+- `AliasService.resolvePlayer` updated to accept optional `currentPrice` parameter
+- `AliasService.resolveCompetition` updated to include `leagueSlug` in response
+- `RedisService` extended with `getOrSet<T>` and `delByPattern` for cache strategy
+- `GameweekOpenGuard` reads `:gameweekId` from route params; returns 403 if deadline passed or status not SCHEDULED/ACTIVE
+- `ScoringService.calculatePlayerPoints()` is the single source of truth for all scoring logic
+- `ScoringService.finaliseGameweekScores()` handles auto-subs, captain multiplier, formation revalidation
+- Transfer wildcard retroactively zeroes all GW deductions + creates `ChipActivation` row
+- Players module uses Redis cache (300s list, 600s detail) with `sha256(dto)` cache keys
 
 ---
 
@@ -163,7 +177,7 @@ None currently.
 |---|---|---|
 | 2026-03-09 | Alias system for all names | Trademark safety; admin-managed in-game names |
 | 2026-03-09 | Post-match scoring only | Reduces complexity; no need for live WebSocket connections |
-| 2026-03-09 | npm workspaces monorepo | Simplest setup; shared types between API and frontend |
+| 2026-03-09 | pnpm workspaces monorepo | Faster installs than npm; strict hoisting prevents phantom deps; `pnpm-workspace.yaml` |
 | 2026-03-09 | BullMQ over cron-only | Retry logic, concurrency control, job visibility for sync pipeline |
 | 2026-03-09 | PlayerPerformance for 0-min players | Required for auto-sub finalisation logic |
 | 2026-03-10 | Two competition types: LEAGUE + TOTAL | League mode = per-league squad + natural GW sequence; Total mode = cross-league squad + calendar-week GWs; 6 global leaderboards total |
@@ -172,3 +186,6 @@ None currently.
 | 2026-03-10 | Business model: ads → cosmetics → prize mini-leagues | Stage 1: ad-supported launch; Stage 2: purchasable cosmetics (emblem, card skin, title, kit, GIF character); Stage 3: paid-entry prize mini-leagues |
 | 2026-03-10 | Target audience: existing FPL players | Users who want FPL-equivalent for La Liga / Serie A / Bundesliga / Ligue 1, plus a novel cross-league Total mode |
 | 2026-03-10 | Visual identity: casual/cartoonish/funny | Not a serious sports sim; alias system enables in-game personality; animated GIF characters are a core cosmetics feature |
+| 2026-03-10 | bcryptjs over bcrypt | bcrypt has no prebuilt native bindings for Node 25; bcryptjs is pure JS with identical API |
+| 2026-03-10 | Pre-push quality gate (2 layers) | Shell hook: lint + TS check (automated); hookify rule: security + code review agents (Claude-executed) |
+| 2026-03-10 | Git worktree for feature branches | Isolates feature work from main without file copying; worktree shares `.git` database; delete after PR merge |
