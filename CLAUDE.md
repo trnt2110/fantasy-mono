@@ -32,30 +32,76 @@ Season-long FPL-style fantasy football game covering the top 5 European leagues 
 
 ```bash
 # Infrastructure
-docker-compose up -d                          # Start Postgres + Redis
+docker compose up -d                          # Start Postgres + Redis
 
 # From monorepo root
 pnpm install                                  # Install all workspaces
 
-# Database (from apps/api/)
-npx prisma migrate dev --name <description>   # Create + apply migration
-npx prisma migrate deploy                     # Apply pending migrations (prod)
-npx prisma studio                             # DB browser
+# Database (from .worktrees/fantasy-game/apps/api/)
+pnpm exec prisma migrate dev --name <desc>    # Create + apply migration
+pnpm exec prisma migrate deploy               # Apply pending migrations (prod)
+pnpm exec prisma studio                       # DB browser
 
-# API (from apps/api/)
-npm run start:dev                             # Start NestJS with file watching
-npm run test                                  # Run all tests
-npm run test -- --testPathPattern=auth        # Run single test file
+# API (from .worktrees/fantasy-game/apps/api/)
+pnpm start:dev                                # Start NestJS with file watching
+pnpm test                                     # Run all tests
+pnpm test -- --testPathPattern=auth           # Run single test file
 
-# Frontend (from apps/web/)
-npm run dev                                   # Start Vite dev server (port 5173)
-npm run build                                 # Production build
-npm run preview                               # Preview production build
+# Frontend (from .worktrees/fantasy-game/apps/web/)
+pnpm dev                                      # Start Vite dev server (port 5173)
+pnpm build                                    # Production build
+pnpm preview                                  # Preview production build
 
 # Seed football data (once, requires running API + admin JWT)
 curl -X POST http://localhost:3000/admin/sync/bootstrap \
   -H "Authorization: Bearer <admin-jwt>"
 ```
+
+---
+
+## Git Worktree Workflow
+
+Active development happens in `.worktrees/fantasy-game/` — a git worktree on `feature/fantasy-game`. The `.worktrees/` directory is gitignored from the root.
+
+```
+/Users/trung/fantasy/           ← main repo (main branch)
+  .worktrees/fantasy-game/      ← worktree (feature/fantasy-game branch)
+```
+
+**Typical workflow:**
+
+```bash
+# All feature development — cd into the worktree first:
+cd /Users/trung/fantasy/.worktrees/fantasy-game/apps/api
+
+# When feature is ready, create a PR:
+cd /Users/trung/fantasy/.worktrees/fantasy-game
+git push origin feature/fantasy-game
+gh pr create --base main
+
+# After PR is merged, pull it into main:
+cd /Users/trung/fantasy
+git pull
+
+# Remove the worktree (optional, after merge):
+git worktree remove .worktrees/fantasy-game
+```
+
+---
+
+## Quality Gates
+
+Every `git push` runs two layers of checks:
+
+**Shell pre-push hook** (`.git/hooks/pre-push`) — automated:
+1. Linter (`pnpm lint` if script exists, else skipped)
+2. TypeScript check (`pnpm exec tsc --noEmit`)
+
+**Hookify rule** (`.claude/hookify.pre-push-checks.local.md`) — Claude-executed:
+3. Security review: `pr-review-toolkit:silent-failure-hunter` agent on changed files
+4. Code review: `pr-review-toolkit:code-reviewer` agent on changed files
+
+Fix all CRITICAL/HIGH findings before proceeding with the push.
 
 ---
 
@@ -134,4 +180,4 @@ Redis counter `api_football:requests:{date}` tracks daily usage. The `ApiFootbal
 
 ## Worktree
 
-Active implementation is on branch `feature/fantasy-game` in `.worktrees/fantasy-game/`. The `.worktrees/` directory is gitignored.
+Active implementation is on branch `feature/fantasy-game` in `.worktrees/fantasy-game/`. The `.worktrees/` directory is gitignored. See **Git Worktree Workflow** above.
