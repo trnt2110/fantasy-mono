@@ -157,11 +157,31 @@ fixture-result-check (cron, 2h)
 
 ### Frontend (`apps/web/`)
 
+**Current state (Phase 4a):** UI fully scaffolded with mock data. No API calls exist yet — all data comes from `src/data/mock.ts`.
+
+**Design system:**
+- Fonts: **Bangers** (display/headings, tracking-widest) + **Nunito** (body, font-bold)
+- Colors: `game-bg` (#0b0f1e), `game-card` (#131929), `game-neon` (#00ff87), `game-gold` (#ffd60a), `game-fire` (#ff6b35), `game-sky` (#38bdf8)
+- All defined as Tailwind theme extensions in `tailwind.config.js`; use `game-*` prefix
+- Reusable classes in `index.css`: `.game-card`, `.btn-primary`, `.btn-secondary`, `.pos-badge`, `.pos-gkp/def/mid/fwd`, `.pitch-bg`, `.scanlines`
+
+**Responsive layout:**
+- Mobile (< `lg`): top bar + bottom nav (`BottomNav`, `lg:hidden`, `fixed bottom-0`)
+- Desktop (`lg:`+): fixed left sidebar (`Sidebar`, `w-64`); main content `lg:ml-64`
+- Pages use `flex flex-col h-full` with `flex-1 overflow-y-auto` for inner scroll
+- Fixed bottom CTAs use `lg:hidden`; desktop gets inline CTAs at bottom of right panel
+
+**Key wiring notes for Phase 4b:**
+- `src/data/mock.ts` defines `Player`, `Fixture`, `Position` types — match these shapes when writing TanStack Query hooks; the components expect exactly these field names
+- `Player.clubShort` (3-letter code, e.g. `"ARS"`) is used for jersey colors in `JerseyIcon.tsx` and fixture badge colors in `Fixtures.tsx` — API must return short codes that match
+- `Player.isCapitain` has a typo (should be `isCaptain`) — fix in mock.ts and all components when wiring real data
+- `SQUAD_BY_POSITION` in `mock.ts` is a static derived constant — replace with a `useMemo` derived from `useSquad()` query result
+- `Sidebar.tsx` has hardcoded bank (`£8.1m`), squad count (`15/15`), and GW deadline — wire to `auth.store` + current gameweek query
+- TanStack Query + axios + Zustand are all installed but not yet initialized beyond `QueryClientProvider` in `main.tsx`
 - **TanStack Query**: all server state (players, picks, scores, leaderboard)
 - **Zustand `auth.store`**: access token + user info only
 - **Zustand `draft.store`**: in-progress transfer staging (not persisted); cleared on confirm/cancel
-- **`FormationViewer`**: pitch SVG rendering player slots from a formation string (`"4-4-2"`)
-- **`GameweekOpenGuard`** equivalent on frontend: `DeadlineCountdown` disables submit buttons when `Gameweek.deadlineTime` passes
+- **`DeadlineCountdown`** (to build): setInterval, disables submit buttons when `Gameweek.deadlineTime` passes
 
 ### Key Scoring Rules (single source of truth: `packages/shared/src/constants/scoring.constants.ts`)
 

@@ -12,7 +12,7 @@
 | **Phase 1** — Foundation | ✅ Done | feature/fantasy-game | Monorepo (pnpm), auth, prisma, api-football client, alias system |
 | **Phase 2** — Core Game Logic | ✅ Done | feature/fantasy-game | Competitions/Clubs/Players/Fixtures/Gameweeks modules; FantasyTeams squad creation; Picks + GameweekOpenGuard; Transfers + wildcard; ScoringService |
 | **Phase 3** — Sync Pipeline + Leaderboard | ✅ Done | feature/fantasy-game | BullMQ jobs, leaderboard, mini-leagues |
-| **Phase 4** — Frontend | 🔲 Not started | — | React SPA |
+| **Phase 4** — Frontend | 🔄 In Progress | feature/fantasy-game | UI scaffolded with mock data; API wiring not started |
 | **Phase 5** — Polish + SEO | 🔲 Not started | — | Caching, SEO, deadline countdown |
 
 ---
@@ -138,25 +138,50 @@ Implementation notes:
 
 ---
 
-## Phase 4 — Frontend 🔲
+## Phase 4 — Frontend 🔄
 
 **Goal:** Full React SPA covering all user journeys.
 
+**Started:** 2026-03-13
+
+### 4a — UI Scaffolding ✅ (2026-03-13)
+
+`apps/web` created. Full responsive UI built with mock data across all 4 main screens.
+
+**What was built:**
+- [x] Vite + React 19 + TypeScript + Tailwind CSS v3 app scaffold
+- [x] TanStack Query v5 + Zustand v5 + React Router v7 installed (not yet wired)
+- [x] Global design system: Bangers (display) + Nunito (body) fonts, dark navy palette, neon green accent, 3D press buttons, game-card component, position badges
+- [x] Responsive shell: fixed left sidebar on `lg:` desktop; top bar + bottom nav on mobile
+- [x] **Squad Selection page** — pitch view (animated player cards, captain badge, bench) + list view; two-panel on desktop (pitch left, list right); player tap-to-modal
+- [x] **Player Selection page** — grouped player list with add/remove; filter sidebar on desktop (squad counter, budget, position, sort, price slider); mobile inline filters
+- [x] **Fixtures page** — GW navigation; expandable fixture cards showing your players + difficulty ratings; 2-column grid on desktop
+- [x] **Leagues page** — stats summary row; leaderboard with rank, movement arrows, streak, points bar; join/create league panel on desktop
+- [x] `src/data/mock.ts` — all UI wired to mock data; types define the shape components expect from the real API
+
+**Actual versions installed (differs from plan):**
+- React 19 (plan said 18), Vite 8 (plan said 5), React Router v7 (plan said v6), Zustand v5 (plan said v4)
+
+### 4b — API Wiring 🔲
+
 Tasks:
-- [ ] 17. Auth pages + axios JWT interceptor + refresh retry
-- [ ] 18. ProtectedRoute + Zustand auth.store + draft.store
-- [ ] 19. Dashboard — GW points, rank, deadline countdown
-- [ ] 20. TeamManagement — FormationViewer (pitch SVG), SquadSelector, PlayerCard
-- [ ] 21. Transfers — TransferModal, player search/filter, budget bar
-- [ ] 22. Fixtures, Leaderboard, MiniLeagues pages
-- [ ] 23. PlayerDetail — performance history + points breakdown
+- [ ] 17. `src/api/client.ts` — axios instance + JWT interceptor + 401 refresh retry
+- [ ] 18. `src/store/auth.store.ts` (Zustand) — accessToken, user, setAuth, clearAuth
+- [ ] 19. `src/store/draft.store.ts` (Zustand) — pending transfers staging, clear on confirm/cancel
+- [ ] 20. `src/api/hooks/` — TanStack Query hooks: useSquad, usePlayers, useFixtures, useLeaderboard, useFantasyLeagues
+- [ ] 21. Auth pages: Login, Register + ProtectedRoute wrapper
+- [ ] 22. Replace all mock data references with real query hooks
+- [ ] 23. Dashboard page — GW points summary, rank, deadline countdown
+- [ ] 24. PlayerDetail modal — real performance history + points breakdown
+- [ ] 25. DeadlineCountdown — setInterval, disables submit buttons when passed
 
 **Verification checklist:**
-- [ ] Auth flow: register → login → dashboard (with JWT stored)
-- [ ] Token refresh: let access token expire → next request auto-refreshes
-- [ ] Team formation view shows correct player positions
-- [ ] Transfer flow: select out → select in → confirm → budget updates
-- [ ] Deadline passed: submit buttons disabled
+- [ ] Auth flow: register → login → dashboard (with JWT stored in Zustand)
+- [ ] Token refresh: let access token expire → next request auto-refreshes transparently
+- [ ] Squad page shows real picks from API
+- [ ] Player selection filters hit real `/players` endpoint with query params
+- [ ] Transfer flow: stage → confirm → budget updates in real time
+- [ ] Deadline passed: all submit/confirm buttons disabled
 
 ---
 
