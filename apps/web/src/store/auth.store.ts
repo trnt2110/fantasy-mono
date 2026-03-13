@@ -28,7 +28,7 @@ export const useAuthStore = create<AuthState>()(
       setAuth: (tokens, user) => set({ ...tokens, user }),
       setFantasyTeam: (fantasyTeamId, budget) => set({ fantasyTeamId, budget }),
       refreshTokens: (accessToken, refreshToken) => set({ accessToken, refreshToken }),
-      clearAuth: () => set({ accessToken: null, refreshToken: null, user: null, fantasyTeamId: null }),
+      clearAuth: () => set({ accessToken: null, refreshToken: null, user: null, fantasyTeamId: null, budget: 0 }),
     }),
     { name: 'fantasy-auth' }
   )
