@@ -109,6 +109,17 @@ export class AdminController {
     return this.adminService.triggerBootstrap(dto.season);
   }
 
+  @Post('sync/fixture/:id')
+  @HttpCode(HttpStatus.ACCEPTED)
+  triggerPerformanceSync(@Param('id', ParseIntPipe) fixtureId: number) {
+    return this.adminService.triggerPerformanceSync(fixtureId);
+  }
+
+  @Get('sync/status')
+  getQueueStatus() {
+    return this.adminService.getQueueStatus();
+  }
+
   @Get('sync/rate-limit')
   getRateLimitStatus() {
     return this.adminService.getRateLimitStatus();

@@ -20,6 +20,8 @@ import { FantasyTeamsModule } from './modules/fantasy-teams/fantasy-teams.module
 import { PicksModule } from './modules/picks/picks.module';
 import { TransfersModule } from './modules/transfers/transfers.module';
 import { ScoringModule } from './modules/scoring/scoring.module';
+import { LeaderboardModule } from './modules/leaderboard/leaderboard.module';
+import { FantasyLeaguesModule } from './modules/fantasy-leagues/fantasy-leagues.module';
 
 @Module({
   imports: [
@@ -40,6 +42,8 @@ import { ScoringModule } from './modules/scoring/scoring.module';
     PicksModule,
     TransfersModule,
     ScoringModule,
+    LeaderboardModule,
+    FantasyLeaguesModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: HttpExceptionFilter },

@@ -2,6 +2,11 @@ import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BootstrapProcessor } from './bootstrap.processor';
+import { FixtureResultCheckProcessor } from './fixture-result-check.processor';
+import { PerformanceSyncProcessor } from './performance-sync.processor';
+import { GameweekFinaliseProcessor } from './gameweek-finalise.processor';
+import { PlayerPriceUpdateProcessor } from './player-price-update.processor';
+import { ScoringModule } from '../scoring/scoring.module';
 import {
   QUEUE_SEASON_BOOTSTRAP,
   QUEUE_FIXTURE_RESULT_CHECK,
@@ -28,8 +33,15 @@ import {
       { name: QUEUE_GAMEWEEK_FINALISE },
       { name: QUEUE_PLAYER_PRICE_UPDATE },
     ),
+    ScoringModule,
   ],
-  providers: [BootstrapProcessor],
+  providers: [
+    BootstrapProcessor,
+    FixtureResultCheckProcessor,
+    PerformanceSyncProcessor,
+    GameweekFinaliseProcessor,
+    PlayerPriceUpdateProcessor,
+  ],
   exports: [BullModule],
 })
 export class SyncModule {}
