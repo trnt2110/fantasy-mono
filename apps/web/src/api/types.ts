@@ -14,7 +14,7 @@ export interface ApiCompetition {
 
 // Clubs
 export interface ApiClub {
-  id: number; name: string; shortName: string; city: string; logoUrl: string; isAliased: boolean
+  id: number; name: string; shortName: string; city?: string; logoUrl?: string; isAliased: boolean
 }
 
 // Players
@@ -28,6 +28,8 @@ export interface ApiPlayerDetail extends ApiPlayer {
 export interface ApiPlayerPerformance {
   gameweekId: number; gameweekNumber: number; fixtureId: number | null
   minutesPlayed: number; goalsScored: number; assists: number; cleanSheet: boolean
+  goalsConceded: number; ownGoals: number; penaltiesSaved: number; penaltiesMissed: number
+  yellowCards: number; redCards: number; saves: number
   bonus: number; totalPoints: number
   pointsBreakdown: Record<string, number>; isFinalised: boolean
 }
@@ -53,7 +55,7 @@ export interface ApiFantasyTeam {
   name: string; budget: number; totalValue: number; formation: string; freeTransfers: number
 }
 export interface ApiFantasyTeamScore {
-  gameweekId: number; gameweekNumber: number; points: number; totalPoints: number; rank: number; isFinalised: boolean
+  gameweekId: number; gameweekNumber: number; points: number; totalPoints: number; rank: number | null; isFinalised: boolean
 }
 
 // Picks
@@ -72,6 +74,7 @@ export interface ApiLeaderboardEntry {
 // Fantasy Leagues
 export interface ApiFantasyLeague {
   id: number; name: string; code: string; competitionId: number
+  memberCount: number; joinedAt: string
 }
 export interface ApiLeagueStanding extends ApiLeaderboardEntry {
   joinedAt: string

@@ -178,6 +178,7 @@ export class PicksService {
       playerId: pick.playerId,
       playerName: this.aliasService.resolvePlayer(pick.player).name,
       position: pick.player.position,
+      clubId: pick.player.club ? pick.player.club.id : null,
       clubName: pick.player.club
         ? this.aliasService.resolveClub(pick.player.club as any).name
         : null,
