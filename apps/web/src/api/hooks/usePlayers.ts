@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { apiClient } from '../client'
 import { useAuthStore } from '../../store/auth.store'
-import type { ApiListResponse, ApiPlayer, ApiPlayerDetail, ApiPlayerPerformance, ApiResponse } from '../types'
+import type { ApiListResponse, ApiPlayer, ApiPlayerDetail, ApiResponse } from '../types'
 
 export interface PlayerFilters {
   position?: string
@@ -42,18 +42,3 @@ export function usePlayerDetail(playerId: number | null) {
   })
 }
 
-export function usePlayerPerformances(playerId: number | null) {
-  const competitionId = useAuthStore(s => s.competitionId)
-  return useQuery({
-    queryKey: ['player-performances', playerId, competitionId],
-    queryFn: async () => {
-      const res = await apiClient.get<ApiListResponse<ApiPlayerPerformance>>(
-        `/players/${playerId}/performances`,
-        { params: { competitionId } }
-      )
-      return res.data.data
-    },
-    enabled: playerId !== null,
-    staleTime: 5 * 60 * 1000,
-  })
-}
