@@ -5,7 +5,15 @@ import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AliasService } from '../alias/alias.service';
 import { ApiFootballClient } from '../../infrastructure/api-football/api-football.client';
-import { QUEUE_SEASON_BOOTSTRAP, JOB_BOOTSTRAP } from '../sync/sync.constants';
+import {
+  QUEUE_SEASON_BOOTSTRAP,
+  QUEUE_FIXTURE_RESULT_CHECK,
+  QUEUE_PERFORMANCE_SYNC,
+  QUEUE_GAMEWEEK_FINALISE,
+  QUEUE_PLAYER_PRICE_UPDATE,
+  JOB_BOOTSTRAP,
+  JOB_PERFORMANCE_SYNC,
+} from '../sync/sync.constants';
 import { UpsertClubAliasDto } from './dto/upsert-club-alias.dto';
 import { UpsertPlayerAliasDto } from './dto/upsert-player-alias.dto';
 import { UpsertCompetitionAliasDto } from './dto/upsert-competition-alias.dto';
@@ -17,6 +25,10 @@ export class AdminService {
     private readonly aliasService: AliasService,
     private readonly apiFootball: ApiFootballClient,
     @InjectQueue(QUEUE_SEASON_BOOTSTRAP) private readonly bootstrapQueue: Queue,
+    @InjectQueue(QUEUE_FIXTURE_RESULT_CHECK) private readonly fixtureCheckQueue: Queue,
+    @InjectQueue(QUEUE_PERFORMANCE_SYNC) private readonly perfSyncQueue: Queue,
+    @InjectQueue(QUEUE_GAMEWEEK_FINALISE) private readonly gwFinaliseQueue: Queue,
+    @InjectQueue(QUEUE_PLAYER_PRICE_UPDATE) private readonly priceUpdateQueue: Queue,
   ) {}
 
   getAliasesSummary() {
@@ -123,6 +135,45 @@ export class AdminService {
   async triggerBootstrap(season: number) {
     const job = await this.bootstrapQueue.add(JOB_BOOTSTRAP, { season }, { removeOnComplete: 10, removeOnFail: 50 });
     return { jobId: job.id, message: `Bootstrap job queued for season ${season}` };
+  }
+
+  async triggerPerformanceSync(fixtureId: number) {
+    const fixture = await this.prisma.fixture.findUnique({
+      where: { id: fixtureId },
+      include: { gameweek: true },
+    });
+    if (!fixture) throw new NotFoundException(`Fixture ${fixtureId} not found`);
+
+    const job = await this.perfSyncQueue.add(
+      JOB_PERFORMANCE_SYNC,
+      { fixtureId, gameweekId: fixture.gameweekId, competitionId: fixture.competitionId },
+      { removeOnComplete: 10, removeOnFail: 50 },
+    );
+    return { jobId: job.id, message: `Performance sync queued for fixture ${fixtureId}` };
+  }
+
+  async getQueueStatus() {
+    const queues = [
+      { name: QUEUE_SEASON_BOOTSTRAP, queue: this.bootstrapQueue },
+      { name: QUEUE_FIXTURE_RESULT_CHECK, queue: this.fixtureCheckQueue },
+      { name: QUEUE_PERFORMANCE_SYNC, queue: this.perfSyncQueue },
+      { name: QUEUE_GAMEWEEK_FINALISE, queue: this.gwFinaliseQueue },
+      { name: QUEUE_PLAYER_PRICE_UPDATE, queue: this.priceUpdateQueue },
+    ];
+
+    const statuses = await Promise.all(
+      queues.map(async ({ name, queue }) => {
+        const [waiting, active, completed, failed] = await Promise.all([
+          queue.getWaitingCount(),
+          queue.getActiveCount(),
+          queue.getCompletedCount(),
+          queue.getFailedCount(),
+        ]);
+        return { name, waiting, active, completed, failed };
+      }),
+    );
+
+    return statuses;
   }
 
   async getRateLimitStatus() {

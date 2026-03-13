@@ -11,7 +11,7 @@
 | **Phase 0** — Documentation Bootstrap | ✅ Done | feature/fantasy-game | All 5 design docs created; design decisions updated 2026-03-10 |
 | **Phase 1** — Foundation | ✅ Done | feature/fantasy-game | Monorepo (pnpm), auth, prisma, api-football client, alias system |
 | **Phase 2** — Core Game Logic | ✅ Done | feature/fantasy-game | Competitions/Clubs/Players/Fixtures/Gameweeks modules; FantasyTeams squad creation; Picks + GameweekOpenGuard; Transfers + wildcard; ScoringService |
-| **Phase 3** — Sync Pipeline + Leaderboard | 🔲 Not started | — | BullMQ jobs, leaderboard, mini-leagues |
+| **Phase 3** — Sync Pipeline + Leaderboard | ✅ Done | feature/fantasy-game | BullMQ jobs, leaderboard, mini-leagues |
 | **Phase 4** — Frontend | 🔲 Not started | — | React SPA |
 | **Phase 5** — Polish + SEO | 🔲 Not started | — | Caching, SEO, deadline countdown |
 
@@ -108,21 +108,33 @@ Implementation notes:
 
 ---
 
-## Phase 3 — Sync Pipeline + Leaderboard 🔲
+## Phase 3 — Sync Pipeline + Leaderboard ✅
+
+**Completed:** 2026-03-13
 
 **Goal:** Automated data sync from API-Football + global/mini-league standings.
 
 Tasks:
-- [ ] 13. BullMQ: fixture-result-check cron → performance-sync → gameweek-finalise
-- [ ] 14. player-price-update job
-- [ ] 15. LeaderboardModule — global standings, paginated, Redis-cached
-- [ ] 16. FantasyLeaguesModule — create/join/standings
+- [x] 13. BullMQ: fixture-result-check cron → performance-sync → gameweek-finalise
+- [x] 14. player-price-update job
+- [x] 15. LeaderboardModule — global standings, paginated, Redis-cached
+- [x] 16. FantasyLeaguesModule — create/join/standings
 
 **Verification checklist:**
-- [ ] Manually trigger performance-sync for test fixture → PlayerPerformance rows created
+- [ ] Manually trigger performance-sync for test fixture → PlayerPerformance rows created (`POST /admin/sync/fixture/:id`)
 - [ ] Trigger gameweek-finalise → GameweekScore rows written for all teams
-- [ ] GET /leaderboard/global → teams ranked by totalPoints
-- [ ] GET /fantasy-leagues/:id → standings visible to members; 403 for non-members
+- [ ] GET /leaderboard/global?competitionId=39 → teams ranked by totalPoints
+- [ ] GET /fantasy-leagues/:id/standings → standings visible to members; 403 for non-members
+- [ ] GET /admin/sync/status → queue stats returned
+
+Implementation notes:
+- `FixtureResultCheckProcessor`: queries fixtures with kickoff > 2h ago, status not finished; calls API-Football to check; updates Fixture + enqueues performance-sync
+- `PerformanceSyncProcessor` (concurrency 2): fetches stats + lineups + events; upserts PlayerPerformance with calculated points; enqueues gameweek-finalise when all fixtures done
+- `GameweekFinaliseProcessor` (concurrency 1): delegates to `ScoringService.finaliseGameweekScores()`; advances isCurrent; invalidates Redis caches; enqueues player-price-update
+- `PlayerPriceUpdateProcessor` (concurrency 1): net transfer delta per player since last GW; ±0.1m at 2% threshold; clamps [4.0, 15.0]; writes PlayerPriceHistory
+- `LeaderboardModule`: `GET /leaderboard/global` with competitionId + optional gameweekId; 5-min Redis cache; resolves to current GW if gameweekId omitted
+- `FantasyLeaguesModule`: create (generates 8-char alphanumeric invite code), join (validates same competition), mine (list my leagues), standings (members-only, 5-min Redis cache)
+- Admin endpoints added: `POST /admin/sync/fixture/:id` (manual perf-sync), `GET /admin/sync/status` (queue stats)
 
 ---
 
