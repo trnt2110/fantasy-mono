@@ -12,16 +12,19 @@ export function DeadlineCountdown({ deadlineTime, className = '' }: Props) {
   const [isPast, setIsPast] = useState(false)
 
   useEffect(() => {
+    let id: ReturnType<typeof setInterval>
+
     function update() {
       const diff = new Date(deadlineTime).getTime() - Date.now()
-      if (diff <= 0) { setIsPast(true); setTimeLeft('DEADLINE PASSED'); return }
+      if (diff <= 0) { setIsPast(true); setTimeLeft('DEADLINE PASSED'); clearInterval(id); return }
       const h = Math.floor(diff / 3600000)
       const m = Math.floor((diff % 3600000) / 60000)
       const s = Math.floor((diff % 60000) / 1000)
       setTimeLeft(h > 0 ? `${h}h ${pad(m)}m ${pad(s)}s` : `${pad(m)}m ${pad(s)}s`)
     }
+
     update()
-    const id = setInterval(update, 1000)
+    id = setInterval(update, 1000)
     return () => clearInterval(id)
   }, [deadlineTime])
 
