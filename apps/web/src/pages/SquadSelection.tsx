@@ -343,28 +343,6 @@ export function SquadSelection() {
   const selectedCount = picks.length
   const bank = team?.budget ?? 0
 
-  if (gwLoading || teamLoading || picksLoading) {
-    return (
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {/* Pitch skeleton */}
-        <Skeleton className="h-8 w-48 mx-auto mb-4" />
-        <div className="space-y-6">
-          {[1, 2, 3, 4].map(row => (
-            <div key={row} className="flex justify-center gap-4">
-              {Array.from({ length: row === 1 ? 1 : row === 2 ? 4 : row === 3 ? 3 : 3 }).map((_, i) => (
-                <div key={i} className="flex flex-col items-center gap-1">
-                  <Skeleton className="h-4 w-12" />
-                  <Skeleton className="w-[70px] h-[85px] rounded-xl" />
-                  <Skeleton className="h-4 w-14" />
-                </div>
-              ))}
-            </div>
-          ))}
-        </div>
-      </div>
-    )
-  }
-
   const selectedClubShort = selectedPlayer
     ? getClubShort(clubsMap, selectedPlayer)
     : ''
@@ -381,6 +359,25 @@ export function SquadSelection() {
             </div>
           }
         >
+        {(gwLoading || teamLoading || picksLoading) ? (
+          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            {/* Pitch skeleton */}
+            <Skeleton className="h-8 w-48 mx-auto mb-4" />
+            <div className="space-y-6">
+              {[1, 2, 3, 4].map(row => (
+                <div key={row} className="flex justify-center gap-4">
+                  {Array.from({ length: row === 1 ? 1 : row === 2 ? 4 : row === 3 ? 3 : 3 }).map((_, i) => (
+                    <div key={i} className="flex flex-col items-center gap-1">
+                      <Skeleton className="h-4 w-12" />
+                      <Skeleton className="w-[70px] h-[85px] rounded-xl" />
+                      <Skeleton className="h-4 w-14" />
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
     <div className="flex flex-col h-full">
 
       {/* ── Header (full width, always) ─────────────────────────── */}
@@ -484,6 +481,7 @@ export function SquadSelection() {
         />
       )}
     </div>
+        )}
         </ErrorBoundary>
       )}
     </QueryErrorResetBoundary>

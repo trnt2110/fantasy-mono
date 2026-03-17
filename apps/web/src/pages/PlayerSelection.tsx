@@ -339,11 +339,11 @@ export function PlayerSelection() {
     showToast(`${player.name} removed 👋`)
   }
 
-  const reset = () => { setSearch(''); setPosFilter('ALL'); setMaxPrice(15); setSortBy('Total Pts') }
+  const resetFilters = () => { setSearch(''); setPosFilter('ALL'); setMaxPrice(15); setSortBy('Total Pts') }
 
   const budget = team?.budget ?? 0
   const filterState: FilterState = { search, posFilter, sortBy, maxPrice }
-  const filterActions: FilterActions = { setSearch, setPosFilter, setSortBy, setMaxPrice, reset }
+  const filterActions: FilterActions = { setSearch, setPosFilter, setSortBy, setMaxPrice, reset: resetFilters }
 
   return (
     <QueryErrorResetBoundary>
