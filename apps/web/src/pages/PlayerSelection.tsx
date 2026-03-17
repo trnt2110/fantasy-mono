@@ -269,7 +269,7 @@ function PlayerListSection({ grouped, clubsMap, pickedIds, onAdd, onRemove, filt
 
 // ── Main PlayerSelection ──────────────────────────────────────
 export function PlayerSelection() {
-  const { setPlayerIn } = useDraftStore()
+  const { playerIn: draftPlayerIn, setPlayerIn } = useDraftStore()
   const clubsMap = useClubsMap()
   const { data: gw } = useCurrentGameweek()
   const { data: team } = useMyFantasyTeam()
@@ -282,7 +282,11 @@ export function PlayerSelection() {
   const [toast, setToast] = useState<string | null>(null)
   const [toastKey, setToastKey] = useState(0)
 
-  const pickedIds = useMemo(() => new Set(picks.map(p => p.playerId)), [picks])
+  const pickedIds = useMemo(() => {
+    const ids = new Set(picks.map(p => p.playerId))
+    if (draftPlayerIn) ids.add(draftPlayerIn.id)
+    return ids
+  }, [picks, draftPlayerIn])
   const squadCount = picks.length
 
   // Build filter params for usePlayers — only position (API-supported)
@@ -326,6 +330,9 @@ export function PlayerSelection() {
   }
 
   const handleRemove = (player: ApiPlayer) => {
+    if (draftPlayerIn?.id === player.id) {
+      setPlayerIn(null)
+    }
     showToast(`${player.name} removed 👋`)
   }
 
