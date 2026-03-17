@@ -1,55 +1,50 @@
 import { useState, useMemo } from 'react'
-import { MOCK_PLAYERS, type Player, type Position } from '../data/mock'
+import { useAuthStore } from '../store/auth.store'
+import { useDraftStore } from '../store/draft.store'
+import { useClubsMap, usePlayers, useGwPicks, useMyFantasyTeam, useCurrentGameweek } from '../api/hooks'
+import type { ApiPlayer } from '../api/types'
 import { JerseyIcon } from '../components/ui/JerseyIcon'
 import { PosBadge } from '../components/ui/PosBadge'
 
-const POSITIONS: Position[] = ['GKP', 'DEF', 'MID', 'FWD']
-const SORT_OPTIONS = ['Total Pts', 'Price', 'Form'] as const
+type Position = 'GKP' | 'DEF' | 'MID' | 'FWD'
 
-function PlayerRow({ player, onAdd, onRemove }: {
-  player: Player
-  onAdd: (id: number) => void
-  onRemove: (id: number) => void
+const POSITIONS: Position[] = ['GKP', 'DEF', 'MID', 'FWD']
+const SORT_OPTIONS = ['Total Pts', 'Price'] as const
+
+function PlayerRow({ player, clubShort, isPicked, onAdd, onRemove }: {
+  player: ApiPlayer
+  clubShort: string
+  isPicked: boolean
+  onAdd: (p: ApiPlayer) => void
+  onRemove: (p: ApiPlayer) => void
 }) {
   return (
     <div
       className={`flex items-center gap-3 px-4 py-3 border-b border-game-border/50
-        hover:bg-white/[0.03] transition-colors group ${player.selected ? 'opacity-60' : ''}`}
+        hover:bg-white/[0.03] transition-colors group ${isPicked ? 'opacity-60' : ''}`}
     >
       <button className="text-slate-500 hover:text-game-sky transition-colors text-xs font-bold w-5 flex-shrink-0">
         ⓘ
       </button>
-      <JerseyIcon clubShort={player.clubShort} position={player.position} size="sm" />
+      <JerseyIcon clubShort={clubShort} position={player.position} size="sm" />
 
       <div className="flex-1 min-w-0">
         <div className="font-bold text-sm text-slate-100 truncate">{player.name}</div>
         <div className="flex items-center gap-1.5 mt-0.5">
-          <span className="text-xs text-slate-500">{player.club}</span>
+          <span className="text-xs text-slate-500">{player.clubName}</span>
           <PosBadge pos={player.position} />
-        </div>
-      </div>
-
-      {/* Extra stats on desktop */}
-      <div className="hidden lg:flex items-center gap-4 text-right flex-shrink-0">
-        <div className="w-16">
-          <div className="text-xs text-slate-500 font-medium">Form</div>
-          <div className="text-sm font-bold text-game-sky">{player.form.toFixed(1)}</div>
         </div>
       </div>
 
       <div className="flex items-center gap-3 text-right flex-shrink-0">
         <div>
           <div className="text-xs text-slate-500 font-medium">Price</div>
-          <div className="text-sm font-bold text-game-gold">£{player.price.toFixed(1)}m</div>
-        </div>
-        <div>
-          <div className="text-xs text-slate-500 font-medium">Pts</div>
-          <div className="text-sm font-bold text-game-neon">{player.totalPoints}</div>
+          <div className="text-sm font-bold text-game-gold">£{player.currentPrice.toFixed(1)}m</div>
         </div>
 
-        {player.selected ? (
+        {isPicked ? (
           <button
-            onClick={() => onRemove(player.id)}
+            onClick={() => onRemove(player)}
             className="w-8 h-8 rounded-full bg-game-red/20 border border-game-red/40
               text-game-red flex items-center justify-center text-sm font-bold
               hover:bg-game-red/40 transition-colors flex-shrink-0"
@@ -58,7 +53,7 @@ function PlayerRow({ player, onAdd, onRemove }: {
           </button>
         ) : (
           <button
-            onClick={() => onAdd(player.id)}
+            onClick={() => onAdd(player)}
             className="w-8 h-8 rounded-full bg-game-neon/10 border border-game-neon/30
               text-game-neon flex items-center justify-center text-sm font-bold
               hover:bg-game-neon/25 transition-colors flex-shrink-0"
@@ -87,11 +82,12 @@ interface FilterActions {
 }
 
 // ── Desktop filter sidebar ────────────────────────────────────
-function FilterSidebar({ f, a, squadCount, filteredCount, onAutoPick }: {
+function FilterSidebar({ f, a, squadCount, filteredCount, budget, onAutoPick }: {
   f: FilterState
   a: FilterActions
   squadCount: number
   filteredCount: number
+  budget: number
   onAutoPick: () => void
 }) {
   return (
@@ -118,11 +114,7 @@ function FilterSidebar({ f, a, squadCount, filteredCount, onAutoPick }: {
         <span className="text-2xl">💰</span>
         <div>
           <div className="text-xs text-slate-500 font-medium">Budget</div>
-          <div className="font-bangers text-xl text-game-gold">£100.0m</div>
-        </div>
-        <div className="ml-auto text-right">
-          <div className="text-xs text-slate-500 font-medium">Spent</div>
-          <div className="font-bangers text-xl text-game-fire">£91.9m</div>
+          <div className="font-bangers text-xl text-game-gold">£{budget.toFixed(1)}m</div>
         </div>
       </div>
 
@@ -183,7 +175,7 @@ function FilterSidebar({ f, a, squadCount, filteredCount, onAutoPick }: {
                   : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
                 }`}
             >
-              {{ 'Total Pts': '🏆 Total Points', Price: '💰 Price', Form: '📈 Form' }[s]}
+              {{ 'Total Pts': '🏆 Total Points', Price: '💰 Price' }[s]}
             </button>
           ))}
         </div>
@@ -231,10 +223,12 @@ function FilterSidebar({ f, a, squadCount, filteredCount, onAutoPick }: {
 }
 
 // ── Player list section ───────────────────────────────────────
-function PlayerListSection({ grouped, onAdd, onRemove, filteredCount }: {
-  grouped: Record<Position, Player[]>
-  onAdd: (id: number) => void
-  onRemove: (id: number) => void
+function PlayerListSection({ grouped, clubsMap, pickedIds, onAdd, onRemove, filteredCount }: {
+  grouped: Record<Position, ApiPlayer[]>
+  clubsMap: Map<number, string>
+  pickedIds: Set<number>
+  onAdd: (p: ApiPlayer) => void
+  onRemove: (p: ApiPlayer) => void
   filteredCount: number
 }) {
   return (
@@ -254,13 +248,18 @@ function PlayerListSection({ grouped, onAdd, onRemove, filteredCount }: {
                 {{ GKP: '🧤 Goalkeepers', DEF: '🛡️ Defenders', MID: '⚡ Midfielders', FWD: '🔥 Forwards' }[pos]}
               </span>
               <div className="flex-1" />
-              <span className="hidden lg:block text-xs text-slate-500 font-medium w-16 text-right">Form</span>
-              <span className="text-xs text-slate-500 font-medium w-12 text-right ml-4">Price</span>
-              <span className="text-xs text-slate-500 font-medium w-6 text-right ml-4">Pts</span>
+              <span className="text-xs text-slate-500 font-medium w-12 text-right">Price</span>
               <div className="w-8" />
             </div>
             {grouped[pos].map(p => (
-              <PlayerRow key={p.id} player={p} onAdd={onAdd} onRemove={onRemove} />
+              <PlayerRow
+                key={p.id}
+                player={p}
+                clubShort={clubsMap.get(p.clubId) ?? p.clubName.slice(0, 3).toUpperCase()}
+                isPicked={pickedIds.has(p.id)}
+                onAdd={onAdd}
+                onRemove={onRemove}
+              />
             ))}
           </div>
         ))}
@@ -271,7 +270,13 @@ function PlayerListSection({ grouped, onAdd, onRemove, filteredCount }: {
 
 // ── Main PlayerSelection ──────────────────────────────────────
 export function PlayerSelection() {
-  const [players, setPlayers] = useState<Player[]>(MOCK_PLAYERS)
+  const { fantasyTeamId } = useAuthStore()
+  const { setPlayerIn } = useDraftStore()
+  const clubsMap = useClubsMap()
+  const { data: gw } = useCurrentGameweek()
+  const { data: team } = useMyFantasyTeam()
+  const { data: picks = [] } = useGwPicks(gw?.id)
+
   const [search, setSearch] = useState('')
   const [posFilter, setPosFilter] = useState<Position | 'ALL'>('ALL')
   const [sortBy, setSortBy] = useState<typeof SORT_OPTIONS[number]>('Total Pts')
@@ -279,23 +284,34 @@ export function PlayerSelection() {
   const [toast, setToast] = useState<string | null>(null)
   const [toastKey, setToastKey] = useState(0)
 
-  const squadCount = players.filter(p => p.selected).length
+  const pickedIds = useMemo(() => new Set(picks.map(p => p.playerId)), [picks])
+  const squadCount = picks.length
 
+  // Build filter params for usePlayers — only position (API-supported)
+  const filterParams = useMemo(() => ({
+    position: posFilter !== 'ALL' ? posFilter : undefined,
+  }), [posFilter])
+
+  const { data: playersResponse } = usePlayers(filterParams)
+  const allPlayers = playersResponse?.data ?? []
+
+  // Client-side filter for search + maxPrice + sort
   const filtered = useMemo(() => {
-    return players
-      .filter(p => posFilter === 'ALL' || p.position === posFilter)
-      .filter(p => p.price <= maxPrice)
-      .filter(p => p.name.toLowerCase().includes(search.toLowerCase()) ||
-                   p.club.toLowerCase().includes(search.toLowerCase()))
-      .sort((a, b) => {
-        if (sortBy === 'Total Pts') return b.totalPoints - a.totalPoints
-        if (sortBy === 'Price') return b.price - a.price
-        return b.form - a.form
+    return allPlayers
+      .filter(p => p.currentPrice <= maxPrice)
+      .filter(p => {
+        if (!search) return true
+        const q = search.toLowerCase()
+        return p.name.toLowerCase().includes(q) || p.clubName.toLowerCase().includes(q)
       })
-  }, [players, posFilter, maxPrice, search, sortBy])
+      .sort((a, b) => {
+        if (sortBy === 'Price') return b.currentPrice - a.currentPrice
+        return 0 // 'Total Pts' — API already returns in default order
+      })
+  }, [allPlayers, maxPrice, search, sortBy])
 
   const grouped = useMemo(() => {
-    const groups: Record<Position, Player[]> = { GKP: [], DEF: [], MID: [], FWD: [] }
+    const groups: Record<Position, ApiPlayer[]> = { GKP: [], DEF: [], MID: [], FWD: [] }
     filtered.forEach(p => groups[p.position].push(p))
     return groups
   }, [filtered])
@@ -305,18 +321,19 @@ export function PlayerSelection() {
     setToastKey(k => k + 1)
     setTimeout(() => setToast(null), 2500)
   }
-  const handleAdd = (id: number) => {
-    const p = players.find(x => x.id === id)!
-    setPlayers(prev => prev.map(x => x.id === id ? { ...x, selected: true } : x))
-    showToast(`${p.name} added! ⚡`)
+
+  const handleAdd = (player: ApiPlayer) => {
+    setPlayerIn(player)
+    showToast(`${player.name} staged for transfer ⚡`)
   }
-  const handleRemove = (id: number) => {
-    const p = players.find(x => x.id === id)!
-    setPlayers(prev => prev.map(x => x.id === id ? { ...x, selected: false } : x))
-    showToast(`${p.name} removed 👋`)
+
+  const handleRemove = (player: ApiPlayer) => {
+    showToast(`${player.name} removed 👋`)
   }
+
   const reset = () => { setSearch(''); setPosFilter('ALL'); setMaxPrice(15); setSortBy('Total Pts') }
 
+  const budget = team?.budget ?? 0
   const filterState: FilterState = { search, posFilter, sortBy, maxPrice }
   const filterActions: FilterActions = { setSearch, setPosFilter, setSortBy, setMaxPrice, reset }
 
@@ -330,7 +347,7 @@ export function PlayerSelection() {
               PLAYER SELECT
             </h1>
             <p className="text-slate-400 text-sm mt-0.5">
-              Max 3 per club · <span className="text-game-gold font-bold">£100m</span> budget
+              Max 3 per club · <span className="text-game-gold font-bold">£{budget.toFixed(1)}m</span> budget
             </p>
           </div>
           <div className="game-card px-3 py-1.5 text-center">
@@ -350,12 +367,20 @@ export function PlayerSelection() {
             a={filterActions}
             squadCount={squadCount}
             filteredCount={filtered.length}
+            budget={budget}
             onAutoPick={() => showToast('Auto pick applied! ⚡')}
           />
         </div>
         {/* Player list */}
         <div className="overflow-y-auto p-4 flex flex-col">
-          <PlayerListSection grouped={grouped} onAdd={handleAdd} onRemove={handleRemove} filteredCount={filtered.length} />
+          <PlayerListSection
+            grouped={grouped}
+            clubsMap={clubsMap}
+            pickedIds={pickedIds}
+            onAdd={handleAdd}
+            onRemove={handleRemove}
+            filteredCount={filtered.length}
+          />
         </div>
       </div>
 
@@ -413,7 +438,14 @@ export function PlayerSelection() {
 
         {/* Scrollable list */}
         <div className="flex-1 overflow-y-auto px-4 pb-24">
-          <PlayerListSection grouped={grouped} onAdd={handleAdd} onRemove={handleRemove} filteredCount={filtered.length} />
+          <PlayerListSection
+            grouped={grouped}
+            clubsMap={clubsMap}
+            pickedIds={pickedIds}
+            onAdd={handleAdd}
+            onRemove={handleRemove}
+            filteredCount={filtered.length}
+          />
         </div>
       </div>
 
