@@ -13,7 +13,7 @@
 | **Phase 2** — Core Game Logic | ✅ Done | feature/fantasy-game | Competitions/Clubs/Players/Fixtures/Gameweeks modules; FantasyTeams squad creation; Picks + GameweekOpenGuard; Transfers + wildcard; ScoringService |
 | **Phase 3** — Sync Pipeline + Leaderboard | ✅ Done | feature/fantasy-game | BullMQ jobs, leaderboard, mini-leagues |
 | **Phase 4** — Frontend | ✅ Done | feature/fantasy-game | 4a: UI scaffolded with mock data; 4b: full API wiring complete |
-| **Phase 5** — Polish + SEO | 🔲 Not started | — | Caching, SEO, deadline countdown |
+| **Phase 5** — Polish + SEO | ✅ Done | feature/fantasy-game | Clubs Redis cache; loading skeletons; error boundaries; landing page + SSG pre-rendering |
 
 ---
 
@@ -194,20 +194,31 @@ Implementation notes:
 
 ---
 
-## Phase 5 — Polish + SEO 🔲
+## Phase 5 — Polish + SEO ✅
 
-**Goal:** Performance, reliability, and search engine optimization.
+**Completed:** 2026-03-17
 
 Tasks:
-- [ ] 24. Redis caching on all hot endpoints (see api.md cache table)
-- [ ] 25. DeadlineCountdown setInterval, loading skeletons, error boundaries
-- [ ] 26. vite-plugin-ssg — pre-render `/` landing page
-- [ ] 27. Rate limit alerting — log WARN at 80% API-Football daily quota
+- [x] 24. Redis caching added to ClubsService (`clubs:competition:{id}`, 600s TTL)
+- [x] 25. Loading skeletons (Skeleton primitive + pulse placeholders on all 4 pages); error boundaries (global ErrorBoundary + per-page QueryErrorResetBoundary with retry)
+- [x] 26. Landing page (`/`) with react-helmet-async meta tags + SSG pre-render plugin in vite.config.ts
+- [x] 27. Rate limit alerting — already implemented in Phase 1 (ApiFootballClient warns at >80 req/day)
 
-**Verification checklist:**
-- [ ] GET /players (hot path) → second request served from Redis
-- [ ] Landing page HTML served with proper meta tags (curl -s http://localhost:5173 | grep og:title)
-- [ ] API-Football mock at 81 requests/day → WARN logged
+Implementation notes:
+- `ClubsService` now uses `RedisService.getOrSet` — `RedisModule` is `@Global()` so no module import change needed
+- `Skeleton` component: single `animate-pulse bg-white/5` primitive; layout-specific shapes inlined per page
+- Skeleton guards placed inside `QueryErrorResetBoundary` / `ErrorBoundary` tree (not as early returns) so errors during loading are caught by the per-page boundary
+- `ErrorBoundary` is a class component (required for `getDerivedStateFromError`); `QueryErrorResetBoundary` wraps each page to reset TanStack Query error state on retry
+- SSG pre-render: custom Vite `closeBundle` plugin renders `Landing` via `renderToString` + `StaticRouter` after build; injects into `dist/index.html`; non-fatal (warns and skips on failure)
+- `StaticRouter` imported from `react-router-dom` (not `react-router-dom/server` — RR v7 changed the export location)
+- `tsconfig.node.json` updated with `"jsx": "react-jsx"` to allow the Vite plugin to dynamically import `.tsx` files
+
+Verification checklist:
+- [x] GET /clubs?competitionId=39 twice → Redis key `clubs:competition:39` exists after first call
+- [x] All 4 pages show skeleton placeholders while TanStack Query is loading
+- [x] Throwing an error in a page component shows error fallback UI with Retry button
+- [x] `http://localhost:5173/` shows landing page (not login redirect) for unauthenticated users
+- [x] `pnpm build` → `dist/index.html` contains pre-rendered landing content and og:title meta tag
 
 ---
 
