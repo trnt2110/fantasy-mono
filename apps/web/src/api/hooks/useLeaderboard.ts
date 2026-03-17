@@ -11,7 +11,7 @@ export function useGlobalLeaderboard(gameweekId?: number, page = 1) {
       const res = await apiClient.get<ApiListResponse<ApiLeaderboardEntry>>('/leaderboard/global', {
         params: { competitionId, gameweekId, page, limit: 20 },
       })
-      return res.data
+      return res.data.data
     },
     staleTime: 5 * 60 * 1000,
   })
