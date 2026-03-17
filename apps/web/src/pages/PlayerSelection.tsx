@@ -1,5 +1,4 @@
 import { useState, useMemo } from 'react'
-import { useAuthStore } from '../store/auth.store'
 import { useDraftStore } from '../store/draft.store'
 import { useClubsMap, usePlayers, useGwPicks, useMyFantasyTeam, useCurrentGameweek } from '../api/hooks'
 import type { ApiPlayer } from '../api/types'
@@ -270,7 +269,6 @@ function PlayerListSection({ grouped, clubsMap, pickedIds, onAdd, onRemove, filt
 
 // ── Main PlayerSelection ──────────────────────────────────────
 export function PlayerSelection() {
-  const { fantasyTeamId } = useAuthStore()
   const { setPlayerIn } = useDraftStore()
   const clubsMap = useClubsMap()
   const { data: gw } = useCurrentGameweek()
