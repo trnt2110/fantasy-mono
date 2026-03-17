@@ -341,7 +341,7 @@ export function SquadSelection() {
   const selectedCount = picks.length
   const bank = team?.budget ?? 0
 
-  if (teamLoading || picksLoading) {
+  if (gwLoading || teamLoading || picksLoading) {
     return (
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {/* Pitch skeleton */}
