@@ -1,4 +1,5 @@
-import axios, { AxiosInstance, AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios'
+import axios from 'axios'
+import type { AxiosInstance, AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios'
 
 let _getAccessToken: (() => string | null) = () => null
 let _getRefreshToken: (() => string | null) = () => null
