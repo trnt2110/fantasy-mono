@@ -326,7 +326,7 @@ export function SquadSelection() {
   const [view, setView] = useState<'pitch' | 'list'>('pitch')
   const [selectedPlayer, setSelectedPlayer] = useState<ApiPick | null>(null)
   const { data: gw, isLoading: gwLoading } = useCurrentGameweek()
-  const { data: team } = useMyFantasyTeam()
+  const { data: team, isLoading: teamLoading } = useMyFantasyTeam()
   const { data: picks = [], isLoading: picksLoading } = useGwPicks(gw?.id)
   const clubsMap = useClubsMap()
 
@@ -341,7 +341,7 @@ export function SquadSelection() {
   const selectedCount = picks.length
   const bank = team?.budget ?? 0
 
-  if (gwLoading || picksLoading) {
+  if (teamLoading || picksLoading) {
     return (
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {/* Pitch skeleton */}
