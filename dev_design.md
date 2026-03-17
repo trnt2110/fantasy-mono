@@ -1,7 +1,7 @@
 # Fantasy Football Game — Technical Design
 
 > **Living document.** Updated at the end of each implementation phase to reflect what was actually built.
-> Last updated: Phase 0 (bootstrap)
+> Last updated: Phase 4a (frontend scaffolding)
 
 ---
 
@@ -9,11 +9,11 @@
 
 | Layer | Technology | Version | Rationale |
 |---|---|---|---|
-| Frontend Framework | React + Vite | React 18, Vite 5 | Fast HMR, SPA, wide ecosystem |
+| Frontend Framework | React + Vite | React 19, Vite 8 | Fast HMR, SPA, wide ecosystem |
 | Styling | Tailwind CSS | v3 | Utility-first, no runtime cost |
 | Server State | TanStack Query | v5 | Caching, invalidation, pagination built-in |
-| Client State | Zustand | v4 | Lightweight; used for auth token + transfer draft staging only |
-| Routing | React Router | v6 | Standard SPA routing |
+| Client State | Zustand | v5 | Lightweight; used for auth token + transfer draft staging only |
+| Routing | React Router | v7 | Standard SPA routing |
 | SEO | react-helmet-async + vite-plugin-ssg | — | Pre-render landing page only |
 | Backend | NestJS | v10 | Modular, decorator-based, TypeScript-native |
 | ORM | Prisma | v5 | Type-safe DB client, migrations as code |
@@ -72,37 +72,40 @@ fantasy/
     │           ├── prisma/               # PrismaService
     │           ├── redis/                # RedisService
     │           └── api-football/         # ApiFootballClient
-    └── web/
-        ├── index.html
+    └── web/                              # Phase 4a scaffolded — all mock data, no API wiring yet
+        ├── index.html                    # Loads Bangers + Nunito from Google Fonts
+        ├── tailwind.config.js            # Custom game.* colors, Bangers/Nunito font families
         ├── vite.config.ts
         └── src/
-            ├── api/                      # TanStack Query hooks + axios client
-            ├── store/                    # Zustand stores (auth.store, draft.store)
+            ├── main.tsx                  # QueryClientProvider + BrowserRouter setup
+            ├── App.tsx                   # Responsive shell: Sidebar (lg) + BottomNav (mobile)
+            ├── index.css                 # Tailwind + game-card, btn-primary, pos-badge, pitch-bg
+            ├── data/
+            │   └── mock.ts               # TEMPORARY: mock players, fixtures, leaderboard
+            │                             # Types here define expected API response shapes
             ├── pages/
-            │   ├── Landing.tsx
-            │   ├── Login.tsx
-            │   ├── Register.tsx
-            │   └── app/
-            │       ├── Dashboard.tsx
-            │       ├── Team.tsx
-            │       ├── Transfers.tsx
-            │       ├── Fixtures.tsx
-            │       ├── Leaderboard.tsx
-            │       ├── Leagues.tsx
-            │       ├── LeagueDetail.tsx
-            │       └── PlayerDetail.tsx
+            │   ├── SquadSelection.tsx    # Pitch view + list view; two-panel on desktop
+            │   ├── PlayerSelection.tsx   # Player list + filter sidebar on desktop
+            │   ├── Fixtures.tsx          # GW nav + 2-col fixture grid on desktop
+            │   └── Leagues.tsx           # Stats summary + leaderboard + join panel
             └── components/
-                ├── football/
-                │   ├── FormationViewer.tsx   # Pitch SVG, player slots by formation
-                │   ├── PlayerCard.tsx        # Photo, name, price, GW pts, captain badge
-                │   └── PlayerStatsModal.tsx  # Points breakdown per GW
-                ├── fantasy/
-                │   ├── TransferModal.tsx     # Two-panel: squad left, market right
-                │   ├── GameweekNavigator.tsx # Arrow nav GW1-38, deadline countdown
-                │   ├── SquadSelector.tsx
-                │   └── DeadlineCountdown.tsx # setInterval countdown, disables forms
-                └── leaderboard/
-                    └── LeaderboardTable.tsx
+                ├── Sidebar.tsx           # Desktop nav (lg:, w-64 fixed left)
+                ├── BottomNav.tsx         # Mobile nav (lg:hidden, fixed bottom)
+                └── ui/
+                    ├── JerseyIcon.tsx    # Club-colored jersey placeholder (3-letter badge)
+                    └── PosBadge.tsx      # Position pill: GKP/DEF/MID/FWD with colors
+
+            # TO BE ADDED in Phase 4b:
+            # ├── api/
+            # │   ├── client.ts           # axios + JWT interceptor + refresh retry
+            # │   └── hooks/              # useSquad, usePlayers, useFixtures, useLeague*
+            # ├── store/
+            # │   ├── auth.store.ts       # accessToken, user, setAuth, clearAuth
+            # │   └── draft.store.ts      # pending transfer staging
+            # └── pages/
+            #     ├── Login.tsx / Register.tsx
+            #     ├── Dashboard.tsx       # GW pts, rank, deadline countdown
+            #     └── PlayerDetail.tsx    # Performance history + points breakdown
 ```
 
 ---

@@ -12,8 +12,8 @@
 | **Phase 1** — Foundation | ✅ Done | feature/fantasy-game | Monorepo (pnpm), auth, prisma, api-football client, alias system |
 | **Phase 2** — Core Game Logic | ✅ Done | feature/fantasy-game | Competitions/Clubs/Players/Fixtures/Gameweeks modules; FantasyTeams squad creation; Picks + GameweekOpenGuard; Transfers + wildcard; ScoringService |
 | **Phase 3** — Sync Pipeline + Leaderboard | ✅ Done | feature/fantasy-game | BullMQ jobs, leaderboard, mini-leagues |
-| **Phase 4** — Frontend | 🔲 Not started | — | React SPA |
-| **Phase 5** — Polish + SEO | 🔲 Not started | — | Caching, SEO, deadline countdown |
+| **Phase 4** — Frontend | ✅ Done | feature/fantasy-game | 4a: UI scaffolded with mock data; 4b: full API wiring complete |
+| **Phase 5** — Polish + SEO | ✅ Done | feature/fantasy-game | Clubs Redis cache; loading skeletons; error boundaries; landing page + SSG pre-rendering |
 
 ---
 
@@ -138,42 +138,87 @@ Implementation notes:
 
 ---
 
-## Phase 4 — Frontend 🔲
+## Phase 4 — Frontend 🔄
 
 **Goal:** Full React SPA covering all user journeys.
 
-Tasks:
-- [ ] 17. Auth pages + axios JWT interceptor + refresh retry
-- [ ] 18. ProtectedRoute + Zustand auth.store + draft.store
-- [ ] 19. Dashboard — GW points, rank, deadline countdown
-- [ ] 20. TeamManagement — FormationViewer (pitch SVG), SquadSelector, PlayerCard
-- [ ] 21. Transfers — TransferModal, player search/filter, budget bar
-- [ ] 22. Fixtures, Leaderboard, MiniLeagues pages
-- [ ] 23. PlayerDetail — performance history + points breakdown
+**Started:** 2026-03-13
+
+### 4a — UI Scaffolding ✅ (2026-03-13)
+
+`apps/web` created. Full responsive UI built with mock data across all 4 main screens.
+
+**What was built:**
+- [x] Vite + React 19 + TypeScript + Tailwind CSS v3 app scaffold
+- [x] TanStack Query v5 + Zustand v5 + React Router v7 installed (not yet wired)
+- [x] Global design system: Bangers (display) + Nunito (body) fonts, dark navy palette, neon green accent, 3D press buttons, game-card component, position badges
+- [x] Responsive shell: fixed left sidebar on `lg:` desktop; top bar + bottom nav on mobile
+- [x] **Squad Selection page** — pitch view (animated player cards, captain badge, bench) + list view; two-panel on desktop (pitch left, list right); player tap-to-modal
+- [x] **Player Selection page** — grouped player list with add/remove; filter sidebar on desktop (squad counter, budget, position, sort, price slider); mobile inline filters
+- [x] **Fixtures page** — GW navigation; expandable fixture cards showing your players + difficulty ratings; 2-column grid on desktop
+- [x] **Leagues page** — stats summary row; leaderboard with rank, movement arrows, streak, points bar; join/create league panel on desktop
+- [x] `src/data/mock.ts` — all UI wired to mock data; types define the shape components expect from the real API
+
+**Actual versions installed (differs from plan):**
+- React 19 (plan said 18), Vite 8 (plan said 5), React Router v7 (plan said v6), Zustand v5 (plan said v4)
+
+### 4b — API Wiring ✅ (2026-03-13)
+
+**What was built:**
+- [x] 17. `src/api/client.ts` — axios instance + JWT Bearer interceptor + 401 refresh retry (queue pattern for concurrent requests; callback registration to avoid circular import with auth store)
+- [x] 18. `src/store/auth.store.ts` (Zustand persist) — accessToken, refreshToken, user, fantasyTeamId, competitionId (default 39), budget; setAuth, setFantasyTeam, refreshTokens, clearAuth
+- [x] 19. `src/store/draft.store.ts` (Zustand ephemeral) — playerIn/playerOut staging; cleared on confirm/cancel
+- [x] 20. `src/api/hooks/` — TanStack Query hooks: useAuth (login/register/logout), useClubs + useClubsMap (memoized Map<clubId,shortName>), useCurrentGameweek, useSquad (useMyFantasyTeam + useGwPicks + useSubmitPicks), usePlayers + usePlayerDetail, usePlayerPerformances, useFixtures, useLeaderboard (useGlobalLeaderboard), useFantasyLeagues (useMyLeagues + useLeagueStandings + useJoinLeague + useCreateLeague)
+- [x] 21. Auth pages: Login, Register + ProtectedRoute wrapper + AppShell extracted from App.tsx
+- [x] 22. All mock data replaced with real query hooks: SquadSelection, PlayerSelection, Fixtures, Leagues, Sidebar all wired
+- [x] 23. Sidebar wired to useCurrentGameweek + DeadlineCountdown + auth store (bank, user)
+- [x] 24. PlayerDetail modal — real performance history (usePlayerDetail + usePlayerPerformances)
+- [x] 25. DeadlineCountdown — setInterval (clears after deadline), shows "Xh MMm SSs" countdown or "DEADLINE PASSED"
+- [x] Fixed `isCapitain` → `isCaptain` typo everywhere (mock.ts + all components)
+
+**Implementation notes:**
+- `clubShort` not returned by `/players` or `/picks` — derived via `useClubsMap()` (Map<clubId,shortName> from `/clubs`), with 3-letter fallback
+- `competitionId=39` (Premier League) hardcoded as MVP default in auth store
+- Fixture GW navigation disabled (nav buttons visible but inert) — only current GW fixtures fetchable via gwId; multi-GW browsing deferred to Phase 5
+- "Form" sort + stat column removed from PlayerSelection — `ApiPlayer` list endpoint does not return a form rating
+- `useGlobalLeaderboard` returns `res.data.data` (entries array, not envelope)
+- `useClubsMap` wrapped in `useMemo` to prevent Map object churn on every render
 
 **Verification checklist:**
-- [ ] Auth flow: register → login → dashboard (with JWT stored)
-- [ ] Token refresh: let access token expire → next request auto-refreshes
-- [ ] Team formation view shows correct player positions
-- [ ] Transfer flow: select out → select in → confirm → budget updates
-- [ ] Deadline passed: submit buttons disabled
+- [x] Auth flow: register → login → app shell (JWT stored in Zustand persist)
+- [x] Token refresh: 401 triggers silent refresh + request retry via queue
+- [x] Squad page shows real picks from API
+- [x] Player selection filters hit real `/players` endpoint with position filter
+- [x] Transfer staging: add player → draft store updated; isPicked reflects staged player
+- [x] Deadline countdown visible in Sidebar, Fixtures header, and mobile banners
 
 ---
 
-## Phase 5 — Polish + SEO 🔲
+## Phase 5 — Polish + SEO ✅
 
-**Goal:** Performance, reliability, and search engine optimization.
+**Completed:** 2026-03-17
 
 Tasks:
-- [ ] 24. Redis caching on all hot endpoints (see api.md cache table)
-- [ ] 25. DeadlineCountdown setInterval, loading skeletons, error boundaries
-- [ ] 26. vite-plugin-ssg — pre-render `/` landing page
-- [ ] 27. Rate limit alerting — log WARN at 80% API-Football daily quota
+- [x] 24. Redis caching added to ClubsService (`clubs:competition:{id}`, 600s TTL)
+- [x] 25. Loading skeletons (Skeleton primitive + pulse placeholders on all 4 pages); error boundaries (global ErrorBoundary + per-page QueryErrorResetBoundary with retry)
+- [x] 26. Landing page (`/`) with react-helmet-async meta tags + SSG pre-render plugin in vite.config.ts
+- [x] 27. Rate limit alerting — already implemented in Phase 1 (ApiFootballClient warns at >80 req/day)
 
-**Verification checklist:**
-- [ ] GET /players (hot path) → second request served from Redis
-- [ ] Landing page HTML served with proper meta tags (curl -s http://localhost:5173 | grep og:title)
-- [ ] API-Football mock at 81 requests/day → WARN logged
+Implementation notes:
+- `ClubsService` now uses `RedisService.getOrSet` — `RedisModule` is `@Global()` so no module import change needed
+- `Skeleton` component: single `animate-pulse bg-white/5` primitive; layout-specific shapes inlined per page
+- Skeleton guards placed inside `QueryErrorResetBoundary` / `ErrorBoundary` tree (not as early returns) so errors during loading are caught by the per-page boundary
+- `ErrorBoundary` is a class component (required for `getDerivedStateFromError`); `QueryErrorResetBoundary` wraps each page to reset TanStack Query error state on retry
+- SSG pre-render: custom Vite `closeBundle` plugin renders `Landing` via `renderToString` + `StaticRouter` after build; injects into `dist/index.html`; non-fatal (warns and skips on failure)
+- `StaticRouter` imported from `react-router-dom` (not `react-router-dom/server` — RR v7 changed the export location)
+- `tsconfig.node.json` updated with `"jsx": "react-jsx"` to allow the Vite plugin to dynamically import `.tsx` files
+
+Verification checklist:
+- [x] GET /clubs?competitionId=39 twice → Redis key `clubs:competition:39` exists after first call
+- [x] All 4 pages show skeleton placeholders while TanStack Query is loading
+- [x] Throwing an error in a page component shows error fallback UI with Retry button
+- [x] `http://localhost:5173/` shows landing page (not login redirect) for unauthenticated users
+- [x] `pnpm build` → `dist/index.html` contains pre-rendered landing content and og:title meta tag
 
 ---
 
