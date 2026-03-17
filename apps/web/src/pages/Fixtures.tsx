@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useCurrentGameweek, useFixtures, useGwPicks, useClubsMap } from '../api/hooks'
 import { DeadlineCountdown } from '../components/DeadlineCountdown'
+import { Skeleton } from '../components/ui/Skeleton'
 import type { ApiFixture } from '../api/types'
 
 const CLUB_COLORS: Record<string, string> = {
@@ -104,7 +105,7 @@ export function Fixtures() {
   const gwNumber = gw?.number ?? 1
   const gwId = gw?.id
 
-  const { data: fixtures = [] } = useFixtures(gwId)
+  const { data: fixtures = [], isLoading: fixturesLoading } = useFixtures(gwId)
   const { data: picks = [] } = useGwPicks(gw?.id)
   const clubsMap = useClubsMap()
 
@@ -133,13 +134,6 @@ export function Fixtures() {
     return groups
   }, [fixtures])
 
-  if (gwLoading) {
-    return (
-      <div className="flex flex-col h-full items-center justify-center text-slate-500">
-        Loading fixtures...
-      </div>
-    )
-  }
 
   return (
     <div className="flex flex-col h-full">
@@ -209,7 +203,26 @@ export function Fixtures() {
           </div>
         )}
 
-        {fixtures.length === 0 && !gwLoading ? (
+        {gwLoading || fixturesLoading ? (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 p-4">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="game-card p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Skeleton className="w-9 h-9 rounded-xl" />
+                    <Skeleton className="h-4 w-24" />
+                  </div>
+                  <Skeleton className="h-5 w-8" />
+                  <div className="flex items-center gap-2">
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="w-9 h-9 rounded-xl" />
+                  </div>
+                </div>
+                <Skeleton className="h-3 w-28 mx-auto" />
+              </div>
+            ))}
+          </div>
+        ) : fixtures.length === 0 ? (
           <div className="text-center text-slate-500 mt-10">No fixtures for this gameweek</div>
         ) : (
           Object.entries(grouped).map(([date, dayFixtures]) => (

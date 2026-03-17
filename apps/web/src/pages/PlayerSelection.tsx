@@ -4,6 +4,7 @@ import { useClubsMap, usePlayers, useGwPicks, useMyFantasyTeam, useCurrentGamewe
 import type { ApiPlayer } from '../api/types'
 import { JerseyIcon } from '../components/ui/JerseyIcon'
 import { PosBadge } from '../components/ui/PosBadge'
+import { Skeleton } from '../components/ui/Skeleton'
 
 type Position = 'GKP' | 'DEF' | 'MID' | 'FWD'
 
@@ -294,7 +295,7 @@ export function PlayerSelection() {
     position: posFilter !== 'ALL' ? posFilter : undefined,
   }), [posFilter])
 
-  const { data: playersResponse } = usePlayers(filterParams)
+  const { data: playersResponse, isLoading: playersLoading } = usePlayers(filterParams)
   const allPlayers = playersResponse?.data ?? []
 
   // Client-side filter for search + maxPrice + sort
@@ -378,14 +379,31 @@ export function PlayerSelection() {
         </div>
         {/* Player list */}
         <div className="overflow-y-auto p-4 flex flex-col">
-          <PlayerListSection
-            grouped={grouped}
-            clubsMap={clubsMap}
-            pickedIds={pickedIds}
-            onAdd={handleAdd}
-            onRemove={handleRemove}
-            filteredCount={filtered.length}
-          />
+          {playersLoading ? (
+            <div className="space-y-0">
+              {Array.from({ length: 10 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-3 px-4 py-3 border-b border-game-border/50">
+                  <Skeleton className="w-5 h-5 rounded-full" />
+                  <Skeleton className="w-8 h-10 rounded-lg" />
+                  <div className="flex-1 space-y-1.5">
+                    <Skeleton className="h-3.5 w-32" />
+                    <Skeleton className="h-3 w-20" />
+                  </div>
+                  <Skeleton className="h-4 w-12" />
+                  <Skeleton className="w-7 h-7 rounded-lg" />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <PlayerListSection
+              grouped={grouped}
+              clubsMap={clubsMap}
+              pickedIds={pickedIds}
+              onAdd={handleAdd}
+              onRemove={handleRemove}
+              filteredCount={filtered.length}
+            />
+          )}
         </div>
       </div>
 
@@ -443,14 +461,31 @@ export function PlayerSelection() {
 
         {/* Scrollable list */}
         <div className="flex-1 overflow-y-auto px-4 pb-24">
-          <PlayerListSection
-            grouped={grouped}
-            clubsMap={clubsMap}
-            pickedIds={pickedIds}
-            onAdd={handleAdd}
-            onRemove={handleRemove}
-            filteredCount={filtered.length}
-          />
+          {playersLoading ? (
+            <div className="space-y-0">
+              {Array.from({ length: 10 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-3 px-4 py-3 border-b border-game-border/50">
+                  <Skeleton className="w-5 h-5 rounded-full" />
+                  <Skeleton className="w-8 h-10 rounded-lg" />
+                  <div className="flex-1 space-y-1.5">
+                    <Skeleton className="h-3.5 w-32" />
+                    <Skeleton className="h-3 w-20" />
+                  </div>
+                  <Skeleton className="h-4 w-12" />
+                  <Skeleton className="w-7 h-7 rounded-lg" />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <PlayerListSection
+              grouped={grouped}
+              clubsMap={clubsMap}
+              pickedIds={pickedIds}
+              onAdd={handleAdd}
+              onRemove={handleRemove}
+              filteredCount={filtered.length}
+            />
+          )}
         </div>
       </div>
 

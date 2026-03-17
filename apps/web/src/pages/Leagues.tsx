@@ -9,6 +9,7 @@ import {
   useCurrentGameweek,
   useMyFantasyTeam,
 } from '../api/hooks'
+import { Skeleton } from '../components/ui/Skeleton'
 import type { ApiLeaderboardEntry } from '../api/types'
 
 function RankBadge({ rank }: { rank: number }) {
@@ -95,10 +96,11 @@ export function Leagues() {
 
   const [selectedLeagueId, setSelectedLeagueId] = useState<number | null>(null)
 
-  const { data: standings = [] } = useLeagueStandings(selectedLeagueId)
-  const { data: globalEntries = [] } = useGlobalLeaderboard(gw?.id)
+  const { data: standings = [], isLoading: standingsLoading } = useLeagueStandings(selectedLeagueId)
+  const { data: globalEntries = [], isLoading: globalLoading } = useGlobalLeaderboard(gw?.id)
 
   const entries: ApiLeaderboardEntry[] = selectedLeagueId ? standings : globalEntries
+  const leaderboardLoading = selectedLeagueId ? standingsLoading : globalLoading
   const maxPts = Math.max(...entries.map(e => e.totalPoints), 1)
 
   const myEntry = entries.find(e => e.fantasyTeamId === fantasyTeamId)
@@ -207,7 +209,20 @@ export function Leagues() {
               </div>
             </div>
 
-            {entries.length === 0 ? (
+            {leaderboardLoading ? (
+              <div className="space-y-1 p-4">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-3 px-3 py-2.5 game-card">
+                    <Skeleton className="w-8 h-8 rounded-xl" />
+                    <div className="flex-1 space-y-1.5">
+                      <Skeleton className="h-3.5 w-28" />
+                      <Skeleton className="h-3 w-16" />
+                    </div>
+                    <Skeleton className="h-4 w-12" />
+                  </div>
+                ))}
+              </div>
+            ) : entries.length === 0 ? (
               <div className="px-4 py-8 text-center text-slate-500 text-sm">
                 No standings available
               </div>
