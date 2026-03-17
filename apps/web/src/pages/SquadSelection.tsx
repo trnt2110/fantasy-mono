@@ -12,6 +12,12 @@ import { PosBadge } from '../components/ui/PosBadge'
 import { DeadlineCountdown } from '../components/DeadlineCountdown'
 import type { ApiPick } from '../api/types'
 
+type SquadByPos = { GKP: ApiPick[]; DEF: ApiPick[]; MID: ApiPick[]; FWD: ApiPick[]; BENCH: ApiPick[] }
+
+function getClubShort(clubsMap: Map<number, string>, p: { clubId: number; clubName: string }): string {
+  return getClubShort(clubsMap, p)
+}
+
 // --- Pitch Card ---
 function PitchCard({ pick, clubShort, onClick, size = 'md' }: {
   pick: ApiPick
@@ -65,7 +71,7 @@ function PitchCard({ pick, clubShort, onClick, size = 'md' }: {
 function PitchView({ onPlayerClick, large = false, squadByPos, clubsMap }: {
   onPlayerClick: (p: ApiPick) => void
   large?: boolean
-  squadByPos: { GKP: ApiPick[]; DEF: ApiPick[]; MID: ApiPick[]; FWD: ApiPick[]; BENCH: ApiPick[] }
+  squadByPos: SquadByPos
   clubsMap: Map<number, string>
 }) {
   const { GKP, DEF, MID, FWD, BENCH } = squadByPos
@@ -94,7 +100,7 @@ function PitchView({ onPlayerClick, large = false, squadByPos, clubsMap }: {
             <PitchCard
               key={p.playerId}
               pick={p}
-              clubShort={clubsMap.get(p.clubId) ?? p.clubName.slice(0, 3).toUpperCase()}
+              clubShort={getClubShort(clubsMap, p)}
               onClick={() => onPlayerClick(p)}
               size={cardSize}
             />
@@ -105,7 +111,7 @@ function PitchView({ onPlayerClick, large = false, squadByPos, clubsMap }: {
             <PitchCard
               key={p.playerId}
               pick={p}
-              clubShort={clubsMap.get(p.clubId) ?? p.clubName.slice(0, 3).toUpperCase()}
+              clubShort={getClubShort(clubsMap, p)}
               onClick={() => onPlayerClick(p)}
               size={cardSize}
             />
@@ -116,7 +122,7 @@ function PitchView({ onPlayerClick, large = false, squadByPos, clubsMap }: {
             <PitchCard
               key={p.playerId}
               pick={p}
-              clubShort={clubsMap.get(p.clubId) ?? p.clubName.slice(0, 3).toUpperCase()}
+              clubShort={getClubShort(clubsMap, p)}
               onClick={() => onPlayerClick(p)}
               size={cardSize}
             />
@@ -127,7 +133,7 @@ function PitchView({ onPlayerClick, large = false, squadByPos, clubsMap }: {
             <PitchCard
               key={p.playerId}
               pick={p}
-              clubShort={clubsMap.get(p.clubId) ?? p.clubName.slice(0, 3).toUpperCase()}
+              clubShort={getClubShort(clubsMap, p)}
               onClick={() => onPlayerClick(p)}
               size={cardSize}
             />
@@ -150,7 +156,7 @@ function PitchView({ onPlayerClick, large = false, squadByPos, clubsMap }: {
                   </div>
                   <PitchCard
                     pick={p}
-                    clubShort={clubsMap.get(p.clubId) ?? p.clubName.slice(0, 3).toUpperCase()}
+                    clubShort={getClubShort(clubsMap, p)}
                     onClick={() => onPlayerClick(p)}
                     size={cardSize}
                   />
@@ -198,7 +204,7 @@ function ListRow({ pick, clubShort }: { pick: ApiPick; clubShort: string }) {
 }
 
 function ListView({ squadByPos, clubsMap }: {
-  squadByPos: { GKP: ApiPick[]; DEF: ApiPick[]; MID: ApiPick[]; FWD: ApiPick[]; BENCH: ApiPick[] }
+  squadByPos: SquadByPos
   clubsMap: Map<number, string>
 }) {
   const { GKP, DEF, MID, FWD, BENCH } = squadByPos
@@ -224,7 +230,7 @@ function ListView({ squadByPos, clubsMap }: {
             <ListRow
               key={p.playerId}
               pick={p}
-              clubShort={clubsMap.get(p.clubId) ?? p.clubName.slice(0, 3).toUpperCase()}
+              clubShort={getClubShort(clubsMap, p)}
             />
           ))}
         </div>
@@ -284,6 +290,7 @@ function PlayerModal({ pick, clubShort, onClose }: {
           <div className="mb-5">
             <div className="text-xs text-slate-500 font-bangers tracking-widest mb-2">RECENT FORM</div>
             <div className="flex gap-2">
+              {/* API returns performances sorted oldest-first; slice(-5) gives last 5 GWs, reverse() shows newest first */}
               {performances.slice(-5).reverse().map(perf => (
                 <div key={perf.gameweekId} className="flex-1 bg-white/5 rounded-lg p-2 text-center border border-white/5">
                   <div className="font-bangers text-lg text-game-neon">{perf.totalPoints}</div>
@@ -317,11 +324,9 @@ function CtaButtons() {
 export function SquadSelection() {
   const [view, setView] = useState<'pitch' | 'list'>('pitch')
   const [selectedPlayer, setSelectedPlayer] = useState<ApiPick | null>(null)
-  const [showToast, setShowToast] = useState(false)
-
-  const { data: gw } = useCurrentGameweek()
+  const { data: gw, isLoading: gwLoading } = useCurrentGameweek()
   const { data: team } = useMyFantasyTeam()
-  const { data: picks = [] } = useGwPicks(gw?.id)
+  const { data: picks = [], isLoading: picksLoading } = useGwPicks(gw?.id)
   const clubsMap = useClubsMap()
 
   const squadByPos = useMemo(() => ({
@@ -335,16 +340,16 @@ export function SquadSelection() {
   const selectedCount = picks.length
   const bank = team?.budget ?? 0
 
-  if (picks.length === 0 && !gw) {
+  if (gwLoading || picksLoading) {
     return (
-      <div className="flex items-center justify-center h-full text-slate-500 font-bangers text-2xl tracking-widest">
+      <div className="flex flex-col h-full items-center justify-center text-slate-500">
         Loading squad...
       </div>
     )
   }
 
   const selectedClubShort = selectedPlayer
-    ? (clubsMap.get(selectedPlayer.clubId) ?? selectedPlayer.clubName.slice(0, 3).toUpperCase())
+    ? getClubShort(clubsMap, selectedPlayer)
     : ''
 
   return (
@@ -370,7 +375,7 @@ export function SquadSelection() {
                 <div className="text-xs text-slate-500">players</div>
               </div>
               <div className="game-card px-3 py-1.5 text-center">
-                <div className="font-bangers text-xl text-game-gold leading-none">£{bank > 0 ? bank.toFixed(1) : '—'}m</div>
+                <div className="font-bangers text-xl text-game-gold leading-none">£{team != null ? bank.toFixed(1) : '—'}m</div>
                 <div className="text-xs text-slate-500">bank</div>
               </div>
             </div>
@@ -391,17 +396,6 @@ export function SquadSelection() {
           </div>
         </div>
 
-        {/* Toast notification */}
-        {!showToast && (
-          <div
-            className="mt-2 rounded-xl px-4 py-2 font-bold text-sm
-              border border-game-purple/50 bg-game-purple/10 text-slate-200
-              cursor-pointer hover:border-game-purple transition-colors"
-            onClick={() => setShowToast(true)}
-          >
-            <span className="text-game-purple font-bangers tracking-wider">Ekitiké</span> has been added to your squad 🎉
-          </div>
-        )}
       </div>
 
       {/* ── Content area ─────────────────────────────────────────── */}

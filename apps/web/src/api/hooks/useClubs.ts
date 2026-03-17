@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { apiClient } from '../client'
 import { useAuthStore } from '../../store/auth.store'
@@ -17,5 +18,5 @@ export function useClubs() {
 
 export function useClubsMap() {
   const { data: clubs } = useClubs()
-  return new Map(clubs?.map(c => [c.id, c.shortName]) ?? [])
+  return useMemo(() => new Map(clubs?.map(c => [c.id, c.shortName]) ?? []), [clubs])
 }
