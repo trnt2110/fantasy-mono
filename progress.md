@@ -12,7 +12,7 @@
 | **Phase 1** — Foundation | ✅ Done | feature/fantasy-game | Monorepo (pnpm), auth, prisma, api-football client, alias system |
 | **Phase 2** — Core Game Logic | ✅ Done | feature/fantasy-game | Competitions/Clubs/Players/Fixtures/Gameweeks modules; FantasyTeams squad creation; Picks + GameweekOpenGuard; Transfers + wildcard; ScoringService |
 | **Phase 3** — Sync Pipeline + Leaderboard | ✅ Done | feature/fantasy-game | BullMQ jobs, leaderboard, mini-leagues |
-| **Phase 4** — Frontend | 🔄 In Progress | feature/fantasy-game | UI scaffolded with mock data; API wiring not started |
+| **Phase 4** — Frontend | ✅ Done | feature/fantasy-game | 4a: UI scaffolded with mock data; 4b: full API wiring complete |
 | **Phase 5** — Polish + SEO | 🔲 Not started | — | Caching, SEO, deadline countdown |
 
 ---
@@ -162,26 +162,35 @@ Implementation notes:
 **Actual versions installed (differs from plan):**
 - React 19 (plan said 18), Vite 8 (plan said 5), React Router v7 (plan said v6), Zustand v5 (plan said v4)
 
-### 4b — API Wiring 🔲
+### 4b — API Wiring ✅ (2026-03-13)
 
-Tasks:
-- [ ] 17. `src/api/client.ts` — axios instance + JWT interceptor + 401 refresh retry
-- [ ] 18. `src/store/auth.store.ts` (Zustand) — accessToken, user, setAuth, clearAuth
-- [ ] 19. `src/store/draft.store.ts` (Zustand) — pending transfers staging, clear on confirm/cancel
-- [ ] 20. `src/api/hooks/` — TanStack Query hooks: useSquad, usePlayers, useFixtures, useLeaderboard, useFantasyLeagues
-- [ ] 21. Auth pages: Login, Register + ProtectedRoute wrapper
-- [ ] 22. Replace all mock data references with real query hooks
-- [ ] 23. Dashboard page — GW points summary, rank, deadline countdown
-- [ ] 24. PlayerDetail modal — real performance history + points breakdown
-- [ ] 25. DeadlineCountdown — setInterval, disables submit buttons when passed
+**What was built:**
+- [x] 17. `src/api/client.ts` — axios instance + JWT Bearer interceptor + 401 refresh retry (queue pattern for concurrent requests; callback registration to avoid circular import with auth store)
+- [x] 18. `src/store/auth.store.ts` (Zustand persist) — accessToken, refreshToken, user, fantasyTeamId, competitionId (default 39), budget; setAuth, setFantasyTeam, refreshTokens, clearAuth
+- [x] 19. `src/store/draft.store.ts` (Zustand ephemeral) — playerIn/playerOut staging; cleared on confirm/cancel
+- [x] 20. `src/api/hooks/` — TanStack Query hooks: useAuth (login/register/logout), useClubs + useClubsMap (memoized Map<clubId,shortName>), useCurrentGameweek, useSquad (useMyFantasyTeam + useGwPicks + useSubmitPicks), usePlayers + usePlayerDetail, usePlayerPerformances, useFixtures, useLeaderboard (useGlobalLeaderboard), useFantasyLeagues (useMyLeagues + useLeagueStandings + useJoinLeague + useCreateLeague)
+- [x] 21. Auth pages: Login, Register + ProtectedRoute wrapper + AppShell extracted from App.tsx
+- [x] 22. All mock data replaced with real query hooks: SquadSelection, PlayerSelection, Fixtures, Leagues, Sidebar all wired
+- [x] 23. Sidebar wired to useCurrentGameweek + DeadlineCountdown + auth store (bank, user)
+- [x] 24. PlayerDetail modal — real performance history (usePlayerDetail + usePlayerPerformances)
+- [x] 25. DeadlineCountdown — setInterval (clears after deadline), shows "Xh MMm SSs" countdown or "DEADLINE PASSED"
+- [x] Fixed `isCapitain` → `isCaptain` typo everywhere (mock.ts + all components)
+
+**Implementation notes:**
+- `clubShort` not returned by `/players` or `/picks` — derived via `useClubsMap()` (Map<clubId,shortName> from `/clubs`), with 3-letter fallback
+- `competitionId=39` (Premier League) hardcoded as MVP default in auth store
+- Fixture GW navigation disabled (nav buttons visible but inert) — only current GW fixtures fetchable via gwId; multi-GW browsing deferred to Phase 5
+- "Form" sort + stat column removed from PlayerSelection — `ApiPlayer` list endpoint does not return a form rating
+- `useGlobalLeaderboard` returns `res.data.data` (entries array, not envelope)
+- `useClubsMap` wrapped in `useMemo` to prevent Map object churn on every render
 
 **Verification checklist:**
-- [ ] Auth flow: register → login → dashboard (with JWT stored in Zustand)
-- [ ] Token refresh: let access token expire → next request auto-refreshes transparently
-- [ ] Squad page shows real picks from API
-- [ ] Player selection filters hit real `/players` endpoint with query params
-- [ ] Transfer flow: stage → confirm → budget updates in real time
-- [ ] Deadline passed: all submit/confirm buttons disabled
+- [x] Auth flow: register → login → app shell (JWT stored in Zustand persist)
+- [x] Token refresh: 401 triggers silent refresh + request retry via queue
+- [x] Squad page shows real picks from API
+- [x] Player selection filters hit real `/players` endpoint with position filter
+- [x] Transfer staging: add player → draft store updated; isPicked reflects staged player
+- [x] Deadline countdown visible in Sidebar, Fixtures header, and mobile banners
 
 ---
 

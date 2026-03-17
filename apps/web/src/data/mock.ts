@@ -10,7 +10,7 @@ export interface Player {
   totalPoints: number
   form: number
   selected: boolean    // in squad
-  isCapitain?: boolean
+  isCaptain?: boolean
   isBench?: boolean
 }
 
@@ -36,7 +36,7 @@ export const MOCK_PLAYERS: Player[] = [
   { id: 6,  name: 'Guéhi',      club: 'Man City',    clubShort: 'MCI', position: 'DEF', price: 5.2,  totalPoints: 133, form: 6.5, selected: true },
   { id: 7,  name: 'Virgil',     club: 'Liverpool',   clubShort: 'LIV', position: 'DEF', price: 6.2,  totalPoints: 130, form: 7.8, selected: true, isBench: true },
   // MID
-  { id: 8,  name: 'Salah',      club: 'Liverpool',   clubShort: 'LIV', position: 'MID', price: 13.1, totalPoints: 221, form: 12.4, selected: true, isCapitain: true },
+  { id: 8,  name: 'Salah',      club: 'Liverpool',   clubShort: 'LIV', position: 'MID', price: 13.1, totalPoints: 221, form: 12.4, selected: true, isCaptain: true },
   { id: 9,  name: 'Saka',       club: 'Arsenal',     clubShort: 'ARS', position: 'MID', price: 10.2, totalPoints: 189, form: 9.8, selected: true },
   { id: 10, name: 'Palmer',     club: 'Chelsea',     clubShort: 'CHE', position: 'MID', price: 10.8, totalPoints: 195, form: 10.2, selected: true },
   { id: 11, name: 'Mbeumo',     club: 'Brentford',   clubShort: 'BRE', position: 'MID', price: 8.1,  totalPoints: 167, form: 8.6, selected: true },
