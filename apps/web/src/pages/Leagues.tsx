@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { QueryErrorResetBoundary } from '@tanstack/react-query'
 import { useAuthStore } from '../store/auth.store'
 import {
   useMyLeagues,
@@ -10,6 +11,7 @@ import {
   useMyFantasyTeam,
 } from '../api/hooks'
 import { Skeleton } from '../components/ui/Skeleton'
+import { ErrorBoundary } from '../components/ErrorBoundary'
 import type { ApiLeaderboardEntry } from '../api/types'
 
 function RankBadge({ rank }: { rank: number }) {
@@ -111,6 +113,17 @@ export function Leagues() {
   const createLeague = useCreateLeague()
 
   return (
+    <QueryErrorResetBoundary>
+      {({ reset }) => (
+        <ErrorBoundary
+          fallback={
+            <div className="flex flex-col items-center justify-center h-full gap-4 p-8">
+              <div className="text-5xl">⚠️</div>
+              <p className="text-slate-400 text-sm">Failed to load data.</p>
+              <button className="btn-primary" onClick={reset}>Retry</button>
+            </div>
+          }
+        >
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="flex-shrink-0 px-5 pt-4 pb-3 border-b border-game-border/50">
@@ -356,5 +369,8 @@ export function Leagues() {
         </div>
       </div>
     </div>
+        </ErrorBoundary>
+      )}
+    </QueryErrorResetBoundary>
   )
 }

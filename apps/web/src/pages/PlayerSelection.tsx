@@ -1,10 +1,12 @@
 import { useState, useMemo } from 'react'
+import { QueryErrorResetBoundary } from '@tanstack/react-query'
 import { useDraftStore } from '../store/draft.store'
 import { useClubsMap, usePlayers, useGwPicks, useMyFantasyTeam, useCurrentGameweek } from '../api/hooks'
 import type { ApiPlayer } from '../api/types'
 import { JerseyIcon } from '../components/ui/JerseyIcon'
 import { PosBadge } from '../components/ui/PosBadge'
 import { Skeleton } from '../components/ui/Skeleton'
+import { ErrorBoundary } from '../components/ErrorBoundary'
 
 type Position = 'GKP' | 'DEF' | 'MID' | 'FWD'
 
@@ -344,6 +346,17 @@ export function PlayerSelection() {
   const filterActions: FilterActions = { setSearch, setPosFilter, setSortBy, setMaxPrice, reset }
 
   return (
+    <QueryErrorResetBoundary>
+      {({ reset }) => (
+        <ErrorBoundary
+          fallback={
+            <div className="flex flex-col items-center justify-center h-full gap-4 p-8">
+              <div className="text-5xl">⚠️</div>
+              <p className="text-slate-400 text-sm">Failed to load data.</p>
+              <button className="btn-primary" onClick={reset}>Retry</button>
+            </div>
+          }
+        >
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="flex-shrink-0 px-5 pt-4 pb-3 border-b border-game-border/50">
@@ -510,5 +523,8 @@ export function PlayerSelection() {
         </div>
       )}
     </div>
+        </ErrorBoundary>
+      )}
+    </QueryErrorResetBoundary>
   )
 }

@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { QueryErrorResetBoundary } from '@tanstack/react-query'
 import {
   useCurrentGameweek,
   useGwPicks,
@@ -11,6 +12,7 @@ import { JerseyIcon } from '../components/ui/JerseyIcon'
 import { PosBadge } from '../components/ui/PosBadge'
 import { Skeleton } from '../components/ui/Skeleton'
 import { DeadlineCountdown } from '../components/DeadlineCountdown'
+import { ErrorBoundary } from '../components/ErrorBoundary'
 import type { ApiPick } from '../api/types'
 
 type SquadByPos = { GKP: ApiPick[]; DEF: ApiPick[]; MID: ApiPick[]; FWD: ApiPick[]; BENCH: ApiPick[] }
@@ -368,6 +370,17 @@ export function SquadSelection() {
     : ''
 
   return (
+    <QueryErrorResetBoundary>
+      {({ reset }) => (
+        <ErrorBoundary
+          fallback={
+            <div className="flex flex-col items-center justify-center h-full gap-4 p-8">
+              <div className="text-5xl">⚠️</div>
+              <p className="text-slate-400 text-sm">Failed to load data.</p>
+              <button className="btn-primary" onClick={reset}>Retry</button>
+            </div>
+          }
+        >
     <div className="flex flex-col h-full">
 
       {/* ── Header (full width, always) ─────────────────────────── */}
@@ -471,5 +484,8 @@ export function SquadSelection() {
         />
       )}
     </div>
+        </ErrorBoundary>
+      )}
+    </QueryErrorResetBoundary>
   )
 }

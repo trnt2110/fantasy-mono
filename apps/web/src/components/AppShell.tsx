@@ -7,6 +7,7 @@ import { Fixtures } from '../pages/Fixtures'
 import { Leagues } from '../pages/Leagues'
 import { useAuthStore } from '../store/auth.store'
 import { useMyFantasyTeam } from '../api/hooks'
+import { ErrorBoundary } from './ErrorBoundary'
 
 export function AppShell() {
   const [page, setPage] = useState('squad')
@@ -15,6 +16,7 @@ export function AppShell() {
   useMyFantasyTeam()  // prefetch on shell mount
 
   return (
+    <ErrorBoundary>
     <div className="h-screen overflow-hidden bg-game-bg flex">
       <Sidebar active={page} onChange={setPage} />
 
@@ -51,5 +53,6 @@ export function AppShell() {
         <BottomNav active={page} onChange={setPage} />
       </div>
     </div>
+    </ErrorBoundary>
   )
 }
