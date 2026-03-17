@@ -15,7 +15,7 @@ import type { ApiPick } from '../api/types'
 type SquadByPos = { GKP: ApiPick[]; DEF: ApiPick[]; MID: ApiPick[]; FWD: ApiPick[]; BENCH: ApiPick[] }
 
 function getClubShort(clubsMap: Map<number, string>, p: { clubId: number; clubName: string }): string {
-  return getClubShort(clubsMap, p)
+  return clubsMap.get(p.clubId) ?? p.clubName.slice(0, 3).toUpperCase()
 }
 
 // --- Pitch Card ---
