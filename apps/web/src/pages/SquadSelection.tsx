@@ -1,11 +1,21 @@
-import { useState } from 'react'
-import { MOCK_PLAYERS, SQUAD_BY_POSITION, type Player } from '../data/mock'
+import { useState, useMemo } from 'react'
+import {
+  useCurrentGameweek,
+  useGwPicks,
+  useMyFantasyTeam,
+  useClubsMap,
+  usePlayerPerformances,
+  usePlayerDetail,
+} from '../api/hooks'
 import { JerseyIcon } from '../components/ui/JerseyIcon'
 import { PosBadge } from '../components/ui/PosBadge'
+import { DeadlineCountdown } from '../components/DeadlineCountdown'
+import type { ApiPick } from '../api/types'
 
 // --- Pitch Card ---
-function PitchCard({ player, onClick, size = 'md' }: {
-  player: Player
+function PitchCard({ pick, clubShort, onClick, size = 'md' }: {
+  pick: ApiPick
+  clubShort: string
   onClick: () => void
   size?: 'sm' | 'md' | 'lg'
 }) {
@@ -19,12 +29,12 @@ function PitchCard({ player, onClick, size = 'md' }: {
       style={{ minWidth: minW }}
     >
       <div className="flex items-center gap-1 bg-black/50 rounded-full px-2 py-0.5 text-xs font-bold text-game-gold border border-game-gold/30">
-        £{player.price.toFixed(1)}m
+        {pick.gwPoints !== null ? `${pick.gwPoints}pts` : '—'}
       </div>
 
       <div className="relative">
-        <JerseyIcon clubShort={player.clubShort} position={player.position} size={size} />
-        {player.isCapitain && (
+        <JerseyIcon clubShort={clubShort} position={pick.position} size={size} />
+        {pick.isCaptain && (
           <div className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-game-gold
             flex items-center justify-center text-game-bg font-bangers text-xs
             shadow-gold border border-yellow-300"
@@ -43,20 +53,22 @@ function PitchCard({ player, onClick, size = 'md' }: {
       <div className="text-center">
         <div className={`font-bold ${nameSize} text-white leading-tight truncate`}
           style={{ maxWidth: minW }}>
-          {player.name.split(' ').at(-1)}
+          {pick.playerName.split(' ').at(-1)}
         </div>
-        <div className="text-xs text-slate-400">{player.clubShort} (H)</div>
+        <div className="text-xs text-slate-400">{clubShort}</div>
       </div>
     </div>
   )
 }
 
 // --- Pitch View ---
-function PitchView({ onPlayerClick, large = false }: {
-  onPlayerClick: (p: Player) => void
+function PitchView({ onPlayerClick, large = false, squadByPos, clubsMap }: {
+  onPlayerClick: (p: ApiPick) => void
   large?: boolean
+  squadByPos: { GKP: ApiPick[]; DEF: ApiPick[]; MID: ApiPick[]; FWD: ApiPick[]; BENCH: ApiPick[] }
+  clubsMap: Map<number, string>
 }) {
-  const { GKP, DEF, MID, FWD, BENCH } = SQUAD_BY_POSITION
+  const { GKP, DEF, MID, FWD, BENCH } = squadByPos
   const cardSize = large ? 'lg' : 'md'
   const gap = large ? 'gap-4' : 'gap-2'
 
@@ -78,16 +90,48 @@ function PitchView({ onPlayerClick, large = false }: {
       {/* Players on pitch */}
       <div className="relative z-10 flex flex-col py-4 px-2 h-full">
         <div className={`flex justify-center ${gap} py-2`}>
-          {GKP.map(p => <PitchCard key={p.id} player={p} onClick={() => onPlayerClick(p)} size={cardSize} />)}
+          {GKP.map(p => (
+            <PitchCard
+              key={p.playerId}
+              pick={p}
+              clubShort={clubsMap.get(p.clubId) ?? p.clubName.slice(0, 3).toUpperCase()}
+              onClick={() => onPlayerClick(p)}
+              size={cardSize}
+            />
+          ))}
         </div>
         <div className={`flex justify-center ${gap} py-2 flex-wrap`}>
-          {DEF.map(p => <PitchCard key={p.id} player={p} onClick={() => onPlayerClick(p)} size={cardSize} />)}
+          {DEF.map(p => (
+            <PitchCard
+              key={p.playerId}
+              pick={p}
+              clubShort={clubsMap.get(p.clubId) ?? p.clubName.slice(0, 3).toUpperCase()}
+              onClick={() => onPlayerClick(p)}
+              size={cardSize}
+            />
+          ))}
         </div>
         <div className={`flex justify-center ${gap} py-2 flex-wrap`}>
-          {MID.map(p => <PitchCard key={p.id} player={p} onClick={() => onPlayerClick(p)} size={cardSize} />)}
+          {MID.map(p => (
+            <PitchCard
+              key={p.playerId}
+              pick={p}
+              clubShort={clubsMap.get(p.clubId) ?? p.clubName.slice(0, 3).toUpperCase()}
+              onClick={() => onPlayerClick(p)}
+              size={cardSize}
+            />
+          ))}
         </div>
         <div className={`flex justify-center ${gap} py-2 flex-wrap`}>
-          {FWD.map(p => <PitchCard key={p.id} player={p} onClick={() => onPlayerClick(p)} size={cardSize} />)}
+          {FWD.map(p => (
+            <PitchCard
+              key={p.playerId}
+              pick={p}
+              clubShort={clubsMap.get(p.clubId) ?? p.clubName.slice(0, 3).toUpperCase()}
+              onClick={() => onPlayerClick(p)}
+              size={cardSize}
+            />
+          ))}
         </div>
         <div className="flex-1" />
 
@@ -99,12 +143,17 @@ function PitchView({ onPlayerClick, large = false }: {
             </div>
             <div className="flex justify-around">
               {BENCH.map((p, i) => (
-                <div key={p.id} className="flex flex-col items-center gap-1">
+                <div key={p.playerId} className="flex flex-col items-center gap-1">
                   <div className="text-xs font-bangers text-slate-500 bg-black/40 rounded-full w-5 h-5
                     flex items-center justify-center">
                     {i + 1}
                   </div>
-                  <PitchCard player={p} onClick={() => onPlayerClick(p)} size={cardSize} />
+                  <PitchCard
+                    pick={p}
+                    clubShort={clubsMap.get(p.clubId) ?? p.clubName.slice(0, 3).toUpperCase()}
+                    onClick={() => onPlayerClick(p)}
+                    size={cardSize}
+                  />
                 </div>
               ))}
             </div>
@@ -116,56 +165,43 @@ function PitchView({ onPlayerClick, large = false }: {
 }
 
 // --- List View ---
-function ListRow({ player }: { player: Player }) {
+function ListRow({ pick, clubShort }: { pick: ApiPick; clubShort: string }) {
   return (
     <div className="flex items-center gap-3 px-4 py-3 border-b border-game-border/50
       hover:bg-white/[0.03] transition-colors">
-      <JerseyIcon clubShort={player.clubShort} position={player.position} size="sm" />
+      <JerseyIcon clubShort={clubShort} position={pick.position} size="sm" />
 
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className="font-bold text-sm text-slate-100">{player.name}</span>
-          {player.isCapitain && (
+          <span className="font-bold text-sm text-slate-100">{pick.playerName}</span>
+          {pick.isCaptain && (
             <span className="bg-game-gold/20 text-game-gold border border-game-gold/40
               text-xs font-bangers px-1.5 py-0.5 rounded-md">C</span>
           )}
-          {player.isBench && (
+          {!pick.isStarting && (
             <span className="bg-slate-700/50 text-slate-500 border border-slate-600/30
               text-xs font-bangers px-1.5 py-0.5 rounded-md">BENCH</span>
           )}
         </div>
         <div className="flex items-center gap-1.5 mt-0.5">
-          <span className="text-xs text-slate-500">{player.club}</span>
-          <PosBadge pos={player.position} />
+          <span className="text-xs text-slate-500">{pick.clubName}</span>
+          <PosBadge pos={pick.position} />
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-4 text-right flex-shrink-0">
-        <div>
-          <div className="text-xs text-slate-500">Price</div>
-          <div className="text-sm font-bold text-game-gold">£{player.price.toFixed(1)}m</div>
-        </div>
-        <div>
-          <div className="text-xs text-slate-500">Form</div>
-          <div className="text-sm font-bold text-game-sky">{player.form.toFixed(1)}</div>
-        </div>
-        <div>
-          <div className="text-xs text-slate-500">Pts</div>
-          <div className="text-sm font-bold text-game-neon">{player.totalPoints}</div>
-        </div>
+      <div className="text-right flex-shrink-0">
+        <div className="text-xs text-slate-500">Pts</div>
+        <div className="text-sm font-bold text-game-neon">{pick.gwPoints ?? '—'}</div>
       </div>
-
-      <button className="ml-2 w-8 h-8 rounded-full bg-game-red/20 border border-game-red/40
-        text-game-red flex items-center justify-center text-sm font-bold
-        hover:bg-game-red/40 transition-colors flex-shrink-0">
-        ✕
-      </button>
     </div>
   )
 }
 
-function ListView() {
-  const { GKP, DEF, MID, FWD, BENCH } = SQUAD_BY_POSITION
+function ListView({ squadByPos, clubsMap }: {
+  squadByPos: { GKP: ApiPick[]; DEF: ApiPick[]; MID: ApiPick[]; FWD: ApiPick[]; BENCH: ApiPick[] }
+  clubsMap: Map<number, string>
+}) {
+  const { GKP, DEF, MID, FWD, BENCH } = squadByPos
   const sections = [
     { label: '🧤 Goalkeepers', players: GKP },
     { label: '🛡️ Defenders',   players: DEF },
@@ -181,13 +217,16 @@ function ListView() {
           <div className="px-4 py-2.5 bg-white/[0.03] border-b border-game-border flex items-center justify-between">
             <span className="font-bangers tracking-widest text-lg text-slate-200">{label}</span>
             <div className="flex gap-4 text-xs text-slate-500 font-medium">
-              <span className="w-12 text-right">Price</span>
-              <span className="w-8 text-right">Form</span>
               <span className="w-6 text-right">Pts</span>
-              <div className="w-8" />
             </div>
           </div>
-          {players.map(p => <ListRow key={p.id} player={p} />)}
+          {players.map(p => (
+            <ListRow
+              key={p.playerId}
+              pick={p}
+              clubShort={clubsMap.get(p.clubId) ?? p.clubName.slice(0, 3).toUpperCase()}
+            />
+          ))}
         </div>
       ))}
     </div>
@@ -195,7 +234,14 @@ function ListView() {
 }
 
 // --- Player Info Modal ---
-function PlayerModal({ player, onClose }: { player: Player; onClose: () => void }) {
+function PlayerModal({ pick, clubShort, onClose }: {
+  pick: ApiPick
+  clubShort: string
+  onClose: () => void
+}) {
+  const { data: detail } = usePlayerDetail(pick.playerId)
+  const { data: performances = [] } = usePlayerPerformances(pick.playerId)
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
@@ -210,22 +256,22 @@ function PlayerModal({ player, onClose }: { player: Player; onClose: () => void 
 
         <div className="flex items-center gap-4 mb-5">
           <div className="anim-float">
-            <JerseyIcon clubShort={player.clubShort} position={player.position} size="lg" />
+            <JerseyIcon clubShort={clubShort} position={pick.position} size="lg" />
           </div>
           <div>
-            <div className="font-bangers text-2xl tracking-wider text-white">{player.name}</div>
+            <div className="font-bangers text-2xl tracking-wider text-white">{pick.playerName}</div>
             <div className="flex items-center gap-2 mt-1">
-              <span className="text-slate-400 text-sm">{player.club}</span>
-              <PosBadge pos={player.position} />
+              <span className="text-slate-400 text-sm">{pick.clubName}</span>
+              <PosBadge pos={pick.position} />
             </div>
           </div>
         </div>
 
         <div className="grid grid-cols-3 gap-3 mb-5">
           {[
-            { label: 'Price', value: `£${player.price.toFixed(1)}m`, color: 'text-game-gold' },
-            { label: 'Form',  value: player.form.toFixed(1),          color: 'text-game-sky' },
-            { label: 'Pts',   value: player.totalPoints,               color: 'text-game-neon' },
+            { label: 'Price', value: detail?.currentPrice != null ? `£${detail.currentPrice.toFixed(1)}m` : '—', color: 'text-game-gold' },
+            { label: 'Own%',  value: detail?.ownershipPct != null ? `${detail.ownershipPct.toFixed(1)}%` : '—', color: 'text-game-sky' },
+            { label: 'Pts',   value: pick.gwPoints ?? '—', color: 'text-game-neon' },
           ].map(({ label, value, color }) => (
             <div key={label} className="bg-white/5 rounded-xl p-3 text-center border border-white/5">
               <div className={`font-bangers text-2xl ${color}`}>{value}</div>
@@ -233,6 +279,20 @@ function PlayerModal({ player, onClose }: { player: Player; onClose: () => void 
             </div>
           ))}
         </div>
+
+        {performances.length > 0 && (
+          <div className="mb-5">
+            <div className="text-xs text-slate-500 font-bangers tracking-widest mb-2">RECENT FORM</div>
+            <div className="flex gap-2">
+              {performances.slice(-5).reverse().map(perf => (
+                <div key={perf.gameweekId} className="flex-1 bg-white/5 rounded-lg p-2 text-center border border-white/5">
+                  <div className="font-bangers text-lg text-game-neon">{perf.totalPoints}</div>
+                  <div className="text-xs text-slate-500">GW{perf.gameweekNumber}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="flex gap-3">
           <button className="btn-secondary flex-1 py-2.5">🔄 TRANSFER</button>
@@ -256,11 +316,36 @@ function CtaButtons() {
 // --- Main Squad Selection ---
 export function SquadSelection() {
   const [view, setView] = useState<'pitch' | 'list'>('pitch')
-  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null)
+  const [selectedPlayer, setSelectedPlayer] = useState<ApiPick | null>(null)
   const [showToast, setShowToast] = useState(false)
 
-  const selectedCount = MOCK_PLAYERS.filter(p => p.selected).length
-  const bank = 8.1
+  const { data: gw } = useCurrentGameweek()
+  const { data: team } = useMyFantasyTeam()
+  const { data: picks = [] } = useGwPicks(gw?.id)
+  const clubsMap = useClubsMap()
+
+  const squadByPos = useMemo(() => ({
+    GKP:   picks.filter(p => p.position === 'GKP' && p.isStarting),
+    DEF:   picks.filter(p => p.position === 'DEF' && p.isStarting),
+    MID:   picks.filter(p => p.position === 'MID' && p.isStarting),
+    FWD:   picks.filter(p => p.position === 'FWD' && p.isStarting),
+    BENCH: picks.filter(p => !p.isStarting).sort((a, b) => (a.benchOrder ?? 0) - (b.benchOrder ?? 0)),
+  }), [picks])
+
+  const selectedCount = picks.length
+  const bank = team?.budget ?? 0
+
+  if (picks.length === 0 && !gw) {
+    return (
+      <div className="flex items-center justify-center h-full text-slate-500 font-bangers text-2xl tracking-widest">
+        Loading squad...
+      </div>
+    )
+  }
+
+  const selectedClubShort = selectedPlayer
+    ? (clubsMap.get(selectedPlayer.clubId) ?? selectedPlayer.clubName.slice(0, 3).toUpperCase())
+    : ''
 
   return (
     <div className="flex flex-col h-full">
@@ -273,7 +358,7 @@ export function SquadSelection() {
               MY SQUAD
             </h1>
             <p className="text-slate-400 text-sm mt-0.5">
-              GW30 · <span className="text-game-fire font-bold">Deadline: Sat 14 Mar, 20:30</span>
+              GW{gw?.number ?? '—'} · {gw && <DeadlineCountdown deadlineTime={gw.deadlineTime} />}
             </p>
           </div>
 
@@ -285,7 +370,7 @@ export function SquadSelection() {
                 <div className="text-xs text-slate-500">players</div>
               </div>
               <div className="game-card px-3 py-1.5 text-center">
-                <div className="font-bangers text-xl text-game-gold leading-none">£{bank}m</div>
+                <div className="font-bangers text-xl text-game-gold leading-none">£{bank > 0 ? bank.toFixed(1) : '—'}m</div>
                 <div className="text-xs text-slate-500">bank</div>
               </div>
             </div>
@@ -325,7 +410,7 @@ export function SquadSelection() {
       <div className="hidden lg:grid lg:grid-cols-[1fr_400px] lg:flex-1 lg:overflow-hidden" style={{ flex: 1 }}>
         {/* Left: Pitch */}
         <div className="overflow-y-auto p-4 border-r border-game-border/50">
-          <PitchView onPlayerClick={setSelectedPlayer} large />
+          <PitchView onPlayerClick={setSelectedPlayer} large squadByPos={squadByPos} clubsMap={clubsMap} />
         </div>
 
         {/* Right: List + CTAs */}
@@ -335,16 +420,13 @@ export function SquadSelection() {
             flex items-center justify-between">
             <span className="font-bangers tracking-widest text-slate-400 text-sm">SQUAD LIST</span>
             <div className="flex gap-4 text-xs text-slate-500 font-medium">
-              <span className="w-12 text-right">Price</span>
-              <span className="w-8 text-right">Form</span>
               <span className="w-6 text-right">Pts</span>
-              <div className="w-8" />
             </div>
           </div>
 
           {/* Scrollable list */}
           <div className="flex-1 overflow-y-auto px-3 py-3">
-            <ListView />
+            <ListView squadByPos={squadByPos} clubsMap={clubsMap} />
           </div>
 
           {/* Inline CTA — desktop only */}
@@ -357,9 +439,9 @@ export function SquadSelection() {
       {/* MOBILE: single panel with toggle */}
       <div className="lg:hidden flex-1 overflow-y-auto px-4 pb-24 pt-3">
         {view === 'pitch' ? (
-          <PitchView onPlayerClick={setSelectedPlayer} />
+          <PitchView onPlayerClick={setSelectedPlayer} squadByPos={squadByPos} clubsMap={clubsMap} />
         ) : (
-          <ListView />
+          <ListView squadByPos={squadByPos} clubsMap={clubsMap} />
         )}
       </div>
 
@@ -373,7 +455,11 @@ export function SquadSelection() {
 
       {/* Player modal */}
       {selectedPlayer && (
-        <PlayerModal player={selectedPlayer} onClose={() => setSelectedPlayer(null)} />
+        <PlayerModal
+          pick={selectedPlayer}
+          clubShort={selectedClubShort}
+          onClose={() => setSelectedPlayer(null)}
+        />
       )}
     </div>
   )
