@@ -3,9 +3,10 @@ import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { ApiFootballClient } from '../../infrastructure/api-football/api-football.client';
-import { QUEUE_SEASON_BOOTSTRAP } from './sync.constants';
-import { LEAGUE_IDS, LEAGUE_SLUGS, LEAGUE_GW_COUNTS, TOTAL_MODE_COMPETITION_ID } from '@fantasy/shared';
-import { CompetitionType } from '@prisma/client';
+import { RedisService } from '../../infrastructure/redis/redis.service';
+import { QUEUE_SEASON_BOOTSTRAP, JOB_PLAYER_SYNC } from './sync.constants';
+import { LEAGUE_IDS, LEAGUE_SLUGS, LEAGUE_GW_COUNTS, TOTAL_MODE_COMPETITION_ID, DEADLINE_OFFSET_MINUTES, POSITION_DEFAULT_PRICES } from '@fantasy/shared';
+import { CompetitionType, Prisma } from '@prisma/client';
 
 interface ApiFootballResponse<T> {
   response: T[];
@@ -15,7 +16,8 @@ interface ApiFootballResponse<T> {
 }
 
 interface ApiLeague {
-  league: { id: number; name: string; country: string };
+  league: { id: number; name: string; type: string };
+  country: { name: string; code: string };
   seasons: Array<{ year: number; current: boolean }>;
 }
 
@@ -38,6 +40,8 @@ interface ApiFixture {
   goals: { home: number | null; away: number | null };
 }
 
+const SEASON_CACHE_TTL_SECONDS = 24 * 60 * 60; // 24 hours
+
 const POSITION_MAP: Record<string, string> = {
   Goalkeeper: 'GK',
   Defender: 'DEF',
@@ -45,7 +49,6 @@ const POSITION_MAP: Record<string, string> = {
   Attacker: 'FWD',
 };
 
-const INITIAL_PLAYER_PRICE = 5.0;
 
 @Processor(QUEUE_SEASON_BOOTSTRAP)
 export class BootstrapProcessor extends WorkerHost {
@@ -54,19 +57,49 @@ export class BootstrapProcessor extends WorkerHost {
   constructor(
     private readonly prisma: PrismaService,
     private readonly apiFootball: ApiFootballClient,
+    private readonly redis: RedisService,
   ) {
     super();
   }
 
   async process(job: Job) {
-    const season = job.data.season as number;
-    this.logger.log(`Starting bootstrap for season ${season}`);
+    if (job.name === JOB_PLAYER_SYNC) {
+      const leagueId = job.data.leagueId as number;
+      await this.seedPlayersForLeague(leagueId);
+      return { success: true };
+    }
+
+    const requestedSeason = job.data.season as number | undefined;
+    const force = job.data.force as boolean | undefined;
+
+    // Safety guard: refuse re-bootstrap if fantasy teams exist, unless force=true
+    const teamCount = await this.prisma.fantasyTeam.count();
+    if (teamCount > 0 && !force) {
+      throw new Error(
+        `Re-bootstrap blocked: ${teamCount} fantasy team(s) exist. ` +
+        'Pass force=true to override (WARNING: may orphan existing picks/transfers).',
+      );
+    }
+    if (teamCount > 0 && force) {
+      this.logger.warn(`Force re-bootstrap with ${teamCount} existing fantasy teams — data integrity not guaranteed`);
+    }
+
+    this.logger.log(requestedSeason ? `Starting bootstrap for season ${requestedSeason}` : 'Starting bootstrap (auto-detecting season per league)');
+
+    await this.redis.delByPattern('api_football:cache:*');
+    this.logger.log('API-Football cache cleared');
+
+    const countBefore = await this.apiFootball.getDailyRequestCount();
+    this.logger.log(`API-Football quota: ${countBefore}/95 requests used today before bootstrap`);
 
     const failures: { leagueId: number; error: string }[] = [];
+    let resolvedSeason = requestedSeason;
 
     for (const leagueId of Object.values(LEAGUE_IDS)) {
       try {
+        const season = requestedSeason ?? await this.detectSeason(leagueId);
         await this.seedLeague(leagueId, season);
+        if (!resolvedSeason) resolvedSeason = season;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         this.logger.error(`Failed to seed league ${leagueId}: ${message}`, err instanceof Error ? err.stack : undefined);
@@ -74,21 +107,34 @@ export class BootstrapProcessor extends WorkerHost {
       }
     }
 
-    await this.seedTotalModeCompetition(season);
+    const countAfter = await this.apiFootball.getDailyRequestCount();
+    this.logger.log(
+      `API-Football quota: ${countAfter}/95 used after bootstrap (+${countAfter - countBefore} requests consumed)`,
+    );
 
+    await this.seedTotalModeCompetition(resolvedSeason ?? new Date().getFullYear());
+
+    const succeeded = Object.values(LEAGUE_IDS).length - failures.length;
     if (failures.length > 0) {
-      const failedIds = failures.map((f) => f.leagueId).join(', ');
-      this.logger.error(`Bootstrap completed with ${failures.length} failures: leagues [${failedIds}]`);
-      throw new Error(`Bootstrap failed for leagues: ${failedIds}`);
+      this.logger.error(
+        `Bootstrap completed: ${succeeded} leagues ok, ${failures.length} failed: ` +
+        failures.map((f) => `${f.leagueId}(${f.error})`).join('; '),
+      );
     }
 
-    this.logger.log('Bootstrap complete');
-    return { success: true };
+    if (failures.length === Object.values(LEAGUE_IDS).length) {
+      // All leagues failed — mark job as failed so BullMQ retries/alerts
+      throw new Error(`All leagues failed during bootstrap: ${failures.map((f) => f.error).join('; ')}`);
+    }
+
+    this.logger.log(`Bootstrap complete (${succeeded} leagues ok, ${failures.length} failures)`);
+    return { success: failures.length === 0, succeeded, failures };
   }
 
-  private async seedLeague(leagueId: number, season: number) {
+  private async seedLeague(leagueId: number, season: number): Promise<void> {
     this.logger.log(`Seeding league ${leagueId}`);
 
+    // ① Fetch all API data BEFORE opening the transaction (no HTTP calls inside tx)
     const leagueData = await this.apiFootball.get<ApiFootballResponse<ApiLeague>>('/leagues', {
       id: leagueId,
       season,
@@ -99,47 +145,58 @@ export class BootstrapProcessor extends WorkerHost {
       return;
     }
 
-    const league = leagueData.response[0].league;
-    const gwCount = LEAGUE_GW_COUNTS[leagueId] ?? 38;
-
-    await this.prisma.competition.upsert({
-      where: { id: leagueId },
-      create: {
-        id: leagueId,
-        realName: league.name,
-        country: league.country,
-        season,
-        type: CompetitionType.LEAGUE,
-        leagueSlug: LEAGUE_SLUGS[leagueId],
-        gwCount,
-        isActive: true,
-      },
-      update: {
-        realName: league.name,
-        country: league.country,
-        season,
-        gwCount,
-        isActive: true,
-      },
-    });
-
-    await this.seedClubs(leagueId, season);
-    await this.seedFixturesAndGameweeks(leagueId, season);
-  }
-
-  private async seedClubs(leagueId: number, season: number) {
     const teamsData = await this.apiFootball.get<ApiFootballResponse<ApiTeam>>('/teams', {
       league: leagueId,
       season,
     });
 
+    const fixturesData = await this.apiFootball.get<ApiFootballResponse<ApiFixture>>('/fixtures', {
+      league: leagueId,
+      season,
+    });
+
+    const { league, country: leagueCountry } = leagueData.response[0];
+    const gwCount = LEAGUE_GW_COUNTS[leagueId] ?? 38;
+
+    // ② All DB writes in a single atomic transaction
+    await this.prisma.$transaction(
+      async (tx) => {
+        await tx.competition.upsert({
+          where: { id: leagueId },
+          create: {
+            id: leagueId,
+            realName: league.name,
+            country: leagueCountry.name,
+            season,
+            type: CompetitionType.LEAGUE,
+            leagueSlug: LEAGUE_SLUGS[leagueId],
+            gwCount,
+            isActive: true,
+          },
+          update: { realName: league.name, country: leagueCountry.name, season, gwCount, isActive: true },
+        });
+
+        await this.seedClubsFromData(teamsData, leagueId, tx);
+        await this.seedFixturesFromData(fixturesData, leagueId, tx);
+      },
+      { timeout: 60_000 },
+    );
+
+    this.logger.log(`League ${leagueId} seeded. Players are fetched separately via /admin/sync/players/:leagueId`);
+  }
+
+  private async seedClubsFromData(
+    teamsData: ApiFootballResponse<ApiTeam>,
+    leagueId: number,
+    tx: Prisma.TransactionClient,
+  ): Promise<void> {
     if (!teamsData.response.length) {
       this.logger.warn(`No teams found for league ${leagueId}`);
       return;
     }
 
     for (const item of teamsData.response) {
-      await this.prisma.club.upsert({
+      await tx.club.upsert({
         where: { id: item.team.id },
         create: {
           id: item.team.id,
@@ -152,9 +209,28 @@ export class BootstrapProcessor extends WorkerHost {
           logoUrl: item.team.logo,
         },
       });
-
-      await this.seedPlayersForClub(item.team.id, leagueId, season);
     }
+  }
+
+  async seedPlayersForLeague(leagueId: number) {
+    // Find the competition to determine the season
+    const competition = await this.prisma.competition.findUnique({ where: { id: leagueId } });
+    if (!competition) {
+      throw new Error(`Competition ${leagueId} not found — run bootstrap first`);
+    }
+
+    const clubs = await this.prisma.club.findMany({ where: { competitionId: leagueId } });
+    if (!clubs.length) {
+      throw new Error(`No clubs found for competition ${leagueId} — run bootstrap first`);
+    }
+
+    this.logger.log(`Seeding players for league ${leagueId} (${clubs.length} clubs, season ${competition.season})`);
+
+    for (const club of clubs) {
+      await this.seedPlayersForClub(club.id, leagueId, competition.season);
+    }
+
+    this.logger.log(`Players seeded for league ${leagueId}`);
   }
 
   private async seedPlayersForClub(clubId: number, leagueId: number, season: number) {
@@ -194,10 +270,11 @@ export class BootstrapProcessor extends WorkerHost {
           },
         });
 
+        const defaultPrice = POSITION_DEFAULT_PRICES[position] ?? 5.0;
         await this.prisma.playerCompetitionPrice.upsert({
           where: { playerId_competitionId: { playerId: item.player.id, competitionId: leagueId } },
-          create: { playerId: item.player.id, competitionId: leagueId, currentPrice: INITIAL_PLAYER_PRICE },
-          update: {},
+          create: { playerId: item.player.id, competitionId: leagueId, currentPrice: defaultPrice },
+          update: {},  // never overwrite admin-adjusted prices on re-sync
         });
       }
 
@@ -205,12 +282,11 @@ export class BootstrapProcessor extends WorkerHost {
     } while (page <= totalPages);
   }
 
-  private async seedFixturesAndGameweeks(leagueId: number, season: number) {
-    const fixturesData = await this.apiFootball.get<ApiFootballResponse<ApiFixture>>('/fixtures', {
-      league: leagueId,
-      season,
-    });
-
+  private async seedFixturesFromData(
+    fixturesData: ApiFootballResponse<ApiFixture>,
+    leagueId: number,
+    tx: Prisma.TransactionClient,
+  ): Promise<void> {
     if (!fixturesData.response.length) {
       this.logger.warn(`No fixtures found for league ${leagueId}`);
       return;
@@ -236,19 +312,18 @@ export class BootstrapProcessor extends WorkerHost {
       const gwNumber = i + 1;
       const fixtures = roundMap.get(round)!;
 
-      // Deadline = earliest kickoff - 90 min
       const kickoffs = fixtures.map((f) => new Date(f.fixture.date).getTime());
       const earliest = new Date(Math.min(...kickoffs));
-      const deadline = new Date(earliest.getTime() - 90 * 60 * 1000);
+      const deadline = new Date(earliest.getTime() - DEADLINE_OFFSET_MINUTES * 60 * 1000);
 
-      const gameweek = await this.prisma.gameweek.upsert({
+      const gameweek = await tx.gameweek.upsert({
         where: { competitionId_number: { competitionId: leagueId, number: gwNumber } },
         create: { competitionId: leagueId, number: gwNumber, deadlineTime: deadline },
         update: { deadlineTime: deadline },
       });
 
       for (const f of fixtures) {
-        await this.prisma.fixture.upsert({
+        await tx.fixture.upsert({
           where: { id: f.fixture.id },
           create: {
             id: f.fixture.id,
@@ -258,7 +333,7 @@ export class BootstrapProcessor extends WorkerHost {
             awayClubId: f.teams.away.id,
             kickoffAt: new Date(f.fixture.date),
             status: f.fixture.status.short,
-            homeGoals: f.goals.home,   // null for unplayed fixtures (explicit null, not undefined)
+            homeGoals: f.goals.home,
             awayGoals: f.goals.away,
           },
           update: {
@@ -270,20 +345,59 @@ export class BootstrapProcessor extends WorkerHost {
       }
     }
 
-    await this.markCurrentGameweek(leagueId);
+    await this.markCurrentGameweek(leagueId, tx);
   }
 
-  private async markCurrentGameweek(competitionId: number) {
-    await this.prisma.gameweek.updateMany({ where: { competitionId }, data: { isCurrent: false } });
+  private async markCurrentGameweek(competitionId: number, tx: Prisma.TransactionClient): Promise<void> {
+    await tx.gameweek.updateMany({ where: { competitionId }, data: { isCurrent: false } });
 
-    const firstScheduled = await this.prisma.gameweek.findFirst({
+    const firstScheduled = await tx.gameweek.findFirst({
       where: { competitionId, status: { not: 'FINISHED' } },
       orderBy: { number: 'asc' },
     });
 
     if (firstScheduled) {
-      await this.prisma.gameweek.update({ where: { id: firstScheduled.id }, data: { isCurrent: true } });
+      await tx.gameweek.update({ where: { id: firstScheduled.id }, data: { isCurrent: true } });
     }
+  }
+
+  private async detectSeason(leagueId: number): Promise<number> {
+    const cacheKey = `bootstrap:season:${leagueId}`;
+    const cached = await this.redis.get(cacheKey);
+    if (cached) {
+      const year = parseInt(cached, 10);
+      this.logger.log(`Using cached season ${year} for league ${leagueId}`);
+      return year;
+    }
+
+    const data = await this.apiFootball.get<ApiFootballResponse<ApiLeague>>('/leagues', {
+      id: leagueId,
+      current: true,
+    });
+
+    if (!data.response.length) {
+      throw new Error(`Could not detect current season for league ${leagueId}`);
+    }
+
+    // Use the season flagged as current; fall back to year-1 if the plan doesn't cover it
+    const currentYear = data.response[0].seasons.find((s) => s.current)?.year;
+    if (!currentYear) {
+      throw new Error(`No current season found for league ${leagueId}`);
+    }
+
+    for (const year of [currentYear, currentYear - 1]) {
+      const teamsData = await this.apiFootball.get<ApiFootballResponse<{ team: { id: number } }>>('/teams', {
+        league: leagueId,
+        season: year,
+      });
+      if (teamsData.results > 0) {
+        this.logger.log(`Auto-detected season ${year} for league ${leagueId} (current flagged: ${currentYear})`);
+        await this.redis.set(cacheKey, String(year), SEASON_CACHE_TTL_SECONDS);
+        return year;
+      }
+    }
+
+    throw new Error(`No season with data found for league ${leagueId} (tried ${currentYear} and ${currentYear - 1})`);
   }
 
   private async seedTotalModeCompetition(season: number) {
@@ -297,9 +411,9 @@ export class BootstrapProcessor extends WorkerHost {
         type: CompetitionType.TOTAL,
         leagueSlug: null,
         gwCount: 0,
-        isActive: true,
+        isActive: false,  // not yet implemented; block team creation
       },
-      update: { season, isActive: true },
+      update: { season, isActive: false },
     });
     this.logger.log('Total mode competition seeded');
   }

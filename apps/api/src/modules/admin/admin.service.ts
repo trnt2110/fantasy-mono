@@ -12,6 +12,7 @@ import {
   QUEUE_GAMEWEEK_FINALISE,
   QUEUE_PLAYER_PRICE_UPDATE,
   JOB_BOOTSTRAP,
+  JOB_PLAYER_SYNC,
   JOB_PERFORMANCE_SYNC,
 } from '../sync/sync.constants';
 import { UpsertClubAliasDto } from './dto/upsert-club-alias.dto';
@@ -132,9 +133,17 @@ export class AdminService {
     }
   }
 
-  async triggerBootstrap(season: number) {
-    const job = await this.bootstrapQueue.add(JOB_BOOTSTRAP, { season }, { removeOnComplete: 10, removeOnFail: 50 });
-    return { jobId: job.id, message: `Bootstrap job queued for season ${season}` };
+  async triggerBootstrap(season?: number, force?: boolean) {
+    const job = await this.bootstrapQueue.add(JOB_BOOTSTRAP, { season, force }, { removeOnComplete: 10, removeOnFail: 50 });
+    return { jobId: job.id, message: season ? `Bootstrap job queued for season ${season}` : 'Bootstrap job queued (auto-detecting season)' };
+  }
+
+  async triggerPlayerSync(leagueId: number) {
+    const competition = await this.prisma.competition.findUnique({ where: { id: leagueId } });
+    if (!competition) throw new NotFoundException(`Competition ${leagueId} not found`);
+
+    const job = await this.bootstrapQueue.add(JOB_PLAYER_SYNC, { leagueId }, { removeOnComplete: 10, removeOnFail: 50 });
+    return { jobId: job.id, message: `Player sync queued for league ${leagueId}` };
   }
 
   async triggerPerformanceSync(fixtureId: number) {

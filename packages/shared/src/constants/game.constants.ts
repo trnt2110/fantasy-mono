@@ -26,4 +26,12 @@ export const EXTRA_TRANSFER_COST = -4;
 
 export const WILDCARD_HALF_SEASON_BOUNDARY = 19; // GW1-19 = half 1; GW20-38 = half 2
 
-export const DEADLINE_OFFSET_MINUTES = 90; // deadline = first kickoff - 90 minutes
+export const DEADLINE_OFFSET_MINUTES = 120; // deadline = first kickoff - 120 minutes (FPL standard)
+
+/** Default prices (£m) seeded per position. Admins adjust after aliasing. */
+export const POSITION_DEFAULT_PRICES: Record<string, number> = {
+  GK: 4.5,
+  DEF: 4.5,
+  MID: 5.0,
+  FWD: 5.5,
+};
