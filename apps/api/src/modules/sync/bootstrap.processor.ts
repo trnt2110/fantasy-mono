@@ -104,14 +104,21 @@ export class BootstrapProcessor extends WorkerHost {
 
     await this.seedTotalModeCompetition(resolvedSeason ?? new Date().getFullYear());
 
+    const succeeded = Object.values(LEAGUE_IDS).length - failures.length;
     if (failures.length > 0) {
-      const failedIds = failures.map((f) => f.leagueId).join(', ');
-      this.logger.error(`Bootstrap completed with ${failures.length} failures: leagues [${failedIds}]`);
-      throw new Error(`Bootstrap failed for leagues: ${failedIds}`);
+      this.logger.error(
+        `Bootstrap completed: ${succeeded} leagues ok, ${failures.length} failed: ` +
+        failures.map((f) => `${f.leagueId}(${f.error})`).join('; '),
+      );
     }
 
-    this.logger.log('Bootstrap complete');
-    return { success: true };
+    if (failures.length === Object.values(LEAGUE_IDS).length) {
+      // All leagues failed — mark job as failed so BullMQ retries/alerts
+      throw new Error(`All leagues failed during bootstrap: ${failures.map((f) => f.error).join('; ')}`);
+    }
+
+    this.logger.log(`Bootstrap complete (${succeeded} leagues ok, ${failures.length} failures)`);
+    return { success: failures.length === 0, succeeded, failures };
   }
 
   private async seedLeague(leagueId: number, season: number): Promise<void> {
