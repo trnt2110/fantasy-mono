@@ -5,7 +5,7 @@ import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { ApiFootballClient } from '../../infrastructure/api-football/api-football.client';
 import { RedisService } from '../../infrastructure/redis/redis.service';
 import { QUEUE_SEASON_BOOTSTRAP, JOB_PLAYER_SYNC } from './sync.constants';
-import { LEAGUE_IDS, LEAGUE_SLUGS, LEAGUE_GW_COUNTS, TOTAL_MODE_COMPETITION_ID, DEADLINE_OFFSET_MINUTES } from '@fantasy/shared';
+import { LEAGUE_IDS, LEAGUE_SLUGS, LEAGUE_GW_COUNTS, TOTAL_MODE_COMPETITION_ID, DEADLINE_OFFSET_MINUTES, POSITION_DEFAULT_PRICES } from '@fantasy/shared';
 import { CompetitionType } from '@prisma/client';
 
 interface ApiFootballResponse<T> {
@@ -47,7 +47,6 @@ const POSITION_MAP: Record<string, string> = {
   Attacker: 'FWD',
 };
 
-const INITIAL_PLAYER_PRICE = 5.0;
 
 @Processor(QUEUE_SEASON_BOOTSTRAP)
 export class BootstrapProcessor extends WorkerHost {
@@ -230,10 +229,11 @@ export class BootstrapProcessor extends WorkerHost {
           },
         });
 
+        const defaultPrice = POSITION_DEFAULT_PRICES[position] ?? 5.0;
         await this.prisma.playerCompetitionPrice.upsert({
           where: { playerId_competitionId: { playerId: item.player.id, competitionId: leagueId } },
-          create: { playerId: item.player.id, competitionId: leagueId, currentPrice: INITIAL_PLAYER_PRICE },
-          update: {},
+          create: { playerId: item.player.id, competitionId: leagueId, currentPrice: defaultPrice },
+          update: {},  // never overwrite admin-adjusted prices on re-sync
         });
       }
 
