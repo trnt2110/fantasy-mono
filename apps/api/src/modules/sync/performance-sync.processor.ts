@@ -11,25 +11,29 @@ import {
   JOB_GAMEWEEK_FINALISE,
 } from './sync.constants';
 
-interface ApiPlayerStats {
-  player: { id: number };
-  statistics: Array<{
-    team: { id: number };
-    games: { minutes: number | null; position: string };
-    goals: { total: number | null; assists: number | null; conceded: number | null; owngoals: number | null; saves: number | null; penaltyscored: number | null; penaltymissed: number | null };
-    cards: { yellow: number | null; red: number | null };
-    dribbles?: { success: number | null };
+// /fixtures/players response: array of team objects, each with a players array
+interface ApiTeamPlayers {
+  team: { id: number };
+  players: Array<{
+    player: { id: number };
+    statistics: Array<{
+      team: { id: number };
+      games: { minutes: number | null; position: string };
+      goals: { total: number | null; assists: number | null; conceded: number | null; saves: number | null };
+      penalty: { scored: number | null; missed: number | null; saved: number | null };
+      cards: { yellow: number | null; red: number | null };
+    }>;
   }>;
+}
+
+interface ApiPlayerStatsResponse {
+  response: ApiTeamPlayers[];
 }
 
 interface ApiLineup {
   team: { id: number };
   startXI: Array<{ player: { id: number } }>;
   substitutes: Array<{ player: { id: number } }>;
-}
-
-interface ApiPlayerStatsResponse {
-  response: ApiPlayerStats[];
 }
 
 interface ApiLineupResponse {
@@ -41,6 +45,7 @@ interface ApiFixtureEvents {
     time: { elapsed: number };
     team: { id: number };
     player: { id: number };
+    assist: { id: number | null };
     type: string;
     detail: string;
   }>;
@@ -83,13 +88,8 @@ export class PerformanceSyncProcessor extends WorkerHost {
     // Calculate minutes played from lineups + substitution events
     const minutesMap = this.calculateMinutesPlayed(lineupData.response, eventsData.response);
 
-    // Build map of bonus points from API stats
-    const bonusMap = new Map<number, number>();
-    for (const entry of statsData.response) {
-      // API-Football doesn't provide BPS directly; we use 0 as placeholder
-      // In production this would come from a dedicated bonus endpoint
-      bonusMap.set(entry.player.id, 0);
-    }
+    // Flatten team → players into a single player list
+    const allPlayerStats = statsData.response.flatMap((t) => t.players);
 
     // Get all players that appeared in lineups (starting + substitutes)
     const allPlayerIds = new Set<number>();
@@ -97,9 +97,7 @@ export class PerformanceSyncProcessor extends WorkerHost {
       for (const p of lineup.startXI) allPlayerIds.add(p.player.id);
       for (const p of lineup.substitutes) allPlayerIds.add(p.player.id);
     }
-
-    // Also include players from stats response
-    for (const entry of statsData.response) {
+    for (const entry of allPlayerStats) {
       allPlayerIds.add(entry.player.id);
     }
 
@@ -111,7 +109,7 @@ export class PerformanceSyncProcessor extends WorkerHost {
     const dbPlayerMap = new Map(dbPlayers.map((p) => [p.id, p]));
 
     // Upsert PlayerPerformance for each player
-    for (const entry of statsData.response) {
+    for (const entry of allPlayerStats) {
       const stat = entry.statistics[0];
       if (!stat) continue;
 
@@ -127,13 +125,13 @@ export class PerformanceSyncProcessor extends WorkerHost {
         assists: stat.goals.assists ?? 0,
         cleanSheet,
         goalsConceded: stat.goals.conceded ?? 0,
-        ownGoals: stat.goals.owngoals ?? 0,
-        penaltiesSaved: stat.goals.penaltyscored ?? 0, // API uses penaltyscored for GK saves
-        penaltiesMissed: stat.goals.penaltymissed ?? 0,
+        ownGoals: 0, // not in API stats; would require parsing events (type=Goal, detail=Own Goal)
+        penaltiesSaved: stat.penalty.saved ?? 0,
+        penaltiesMissed: stat.penalty.missed ?? 0,
         yellowCards: stat.cards.yellow ?? 0,
         redCards: stat.cards.red ?? 0,
         saves: stat.goals.saves ?? 0,
-        bonus: bonusMap.get(entry.player.id) ?? 0,
+        bonus: 0,
       };
 
       const { totalPoints, pointsBreakdown } = this.scoring.calculatePlayerPoints(perfInput, dbPlayer.position);
@@ -200,11 +198,12 @@ export class PerformanceSyncProcessor extends WorkerHost {
     for (const event of events) {
       if (event.type !== 'subst') continue;
       const elapsed = event.time.elapsed;
-      // player coming off — update their minutes to the sub time
+      // Player going off: played until substitution time
       minutesMap.set(event.player.id, elapsed);
-      // The assist field in event contains the player coming on — not available in this structure
-      // Minutes for subs coming on: 90 - elapsed
-      // We handle this separately via the 'assist' field which isn't in this simplified type
+      // Player coming on (in assist field): played from substitution time to 90
+      if (event.assist.id !== null) {
+        minutesMap.set(event.assist.id, 90 - elapsed);
+      }
     }
 
     return minutesMap;
