@@ -87,6 +87,9 @@ export class BootstrapProcessor extends WorkerHost {
     await this.redis.delByPattern('api_football:cache:*');
     this.logger.log('API-Football cache cleared');
 
+    const countBefore = await this.apiFootball.getDailyRequestCount();
+    this.logger.log(`API-Football quota: ${countBefore}/95 requests used today before bootstrap`);
+
     const failures: { leagueId: number; error: string }[] = [];
     let resolvedSeason = requestedSeason;
 
@@ -101,6 +104,11 @@ export class BootstrapProcessor extends WorkerHost {
         failures.push({ leagueId, error: message });
       }
     }
+
+    const countAfter = await this.apiFootball.getDailyRequestCount();
+    this.logger.log(
+      `API-Football quota: ${countAfter}/95 used after bootstrap (+${countAfter - countBefore} requests consumed)`,
+    );
 
     await this.seedTotalModeCompetition(resolvedSeason ?? new Date().getFullYear());
 
