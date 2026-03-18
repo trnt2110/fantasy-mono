@@ -363,9 +363,9 @@ export class BootstrapProcessor extends WorkerHost {
         type: CompetitionType.TOTAL,
         leagueSlug: null,
         gwCount: 0,
-        isActive: true,
+        isActive: false,  // not yet implemented; block team creation
       },
-      update: { season, isActive: true },
+      update: { season, isActive: false },
     });
     this.logger.log('Total mode competition seeded');
   }
