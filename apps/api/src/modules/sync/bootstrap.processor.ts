@@ -40,6 +40,8 @@ interface ApiFixture {
   goals: { home: number | null; away: number | null };
 }
 
+const SEASON_CACHE_TTL_SECONDS = 24 * 60 * 60; // 24 hours
+
 const POSITION_MAP: Record<string, string> = {
   Goalkeeper: 'GK',
   Defender: 'DEF',
@@ -360,6 +362,14 @@ export class BootstrapProcessor extends WorkerHost {
   }
 
   private async detectSeason(leagueId: number): Promise<number> {
+    const cacheKey = `bootstrap:season:${leagueId}`;
+    const cached = await this.redis.get(cacheKey);
+    if (cached) {
+      const year = parseInt(cached, 10);
+      this.logger.log(`Using cached season ${year} for league ${leagueId}`);
+      return year;
+    }
+
     const data = await this.apiFootball.get<ApiFootballResponse<ApiLeague>>('/leagues', {
       id: leagueId,
       current: true,
@@ -382,6 +392,7 @@ export class BootstrapProcessor extends WorkerHost {
       });
       if (teamsData.results > 0) {
         this.logger.log(`Auto-detected season ${year} for league ${leagueId} (current flagged: ${currentYear})`);
+        await this.redis.set(cacheKey, String(year), SEASON_CACHE_TTL_SECONDS);
         return year;
       }
     }
