@@ -106,7 +106,14 @@ export class AdminController {
   @Post('sync/bootstrap')
   @HttpCode(HttpStatus.ACCEPTED)
   triggerBootstrap(@Body() dto: BootstrapDto) {
-    return this.adminService.triggerBootstrap(dto.season);
+    return this.adminService.triggerBootstrap(dto.season, dto.force);
+  }
+
+
+  @Post('sync/players/:leagueId')
+  @HttpCode(HttpStatus.ACCEPTED)
+  triggerPlayerSync(@Param('leagueId', ParseIntPipe) leagueId: number) {
+    return this.adminService.triggerPlayerSync(leagueId);
   }
 
   @Post('sync/fixture/:id')

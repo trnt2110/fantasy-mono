@@ -68,6 +68,20 @@ export class BootstrapProcessor extends WorkerHost {
     }
 
     const requestedSeason = job.data.season as number | undefined;
+    const force = job.data.force as boolean | undefined;
+
+    // Safety guard: refuse re-bootstrap if fantasy teams exist, unless force=true
+    const teamCount = await this.prisma.fantasyTeam.count();
+    if (teamCount > 0 && !force) {
+      throw new Error(
+        `Re-bootstrap blocked: ${teamCount} fantasy team(s) exist. ` +
+        'Pass force=true to override (WARNING: may orphan existing picks/transfers).',
+      );
+    }
+    if (teamCount > 0 && force) {
+      this.logger.warn(`Force re-bootstrap with ${teamCount} existing fantasy teams — data integrity not guaranteed`);
+    }
+
     this.logger.log(requestedSeason ? `Starting bootstrap for season ${requestedSeason}` : 'Starting bootstrap (auto-detecting season per league)');
 
     await this.redis.delByPattern('api_football:cache:*');
