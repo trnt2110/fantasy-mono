@@ -37,7 +37,15 @@ export class ApiFootballClient {
 
     await this.checkRateLimit();
 
-    const response = await this.http.get<T>(path, { params });
+    let response;
+    try {
+      response = await this.http.get<T>(path, { params });
+    } catch (err: any) {
+      const status = err?.response?.status;
+      const body = err?.response?.data;
+      this.logger.error(`API-Football ${status} on ${path} params=${JSON.stringify(params)} body=${JSON.stringify(body)}`);
+      throw err;
+    }
     const data = response.data;
 
     await this.redis.set(cacheKey, JSON.stringify(data), CACHE_TTL_SECONDS);
