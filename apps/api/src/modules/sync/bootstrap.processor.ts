@@ -3,8 +3,9 @@ import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { ApiFootballClient } from '../../infrastructure/api-football/api-football.client';
-import { QUEUE_SEASON_BOOTSTRAP } from './sync.constants';
-import { LEAGUE_IDS, LEAGUE_SLUGS, LEAGUE_GW_COUNTS, TOTAL_MODE_COMPETITION_ID } from '@fantasy/shared';
+import { RedisService } from '../../infrastructure/redis/redis.service';
+import { QUEUE_SEASON_BOOTSTRAP, JOB_PLAYER_SYNC } from './sync.constants';
+import { LEAGUE_IDS, LEAGUE_SLUGS, LEAGUE_GW_COUNTS, TOTAL_MODE_COMPETITION_ID, DEADLINE_OFFSET_MINUTES } from '@fantasy/shared';
 import { CompetitionType } from '@prisma/client';
 
 interface ApiFootballResponse<T> {
@@ -15,7 +16,8 @@ interface ApiFootballResponse<T> {
 }
 
 interface ApiLeague {
-  league: { id: number; name: string; country: string };
+  league: { id: number; name: string; type: string };
+  country: { name: string; code: string };
   seasons: Array<{ year: number; current: boolean }>;
 }
 
@@ -54,19 +56,32 @@ export class BootstrapProcessor extends WorkerHost {
   constructor(
     private readonly prisma: PrismaService,
     private readonly apiFootball: ApiFootballClient,
+    private readonly redis: RedisService,
   ) {
     super();
   }
 
   async process(job: Job) {
-    const season = job.data.season as number;
-    this.logger.log(`Starting bootstrap for season ${season}`);
+    if (job.name === JOB_PLAYER_SYNC) {
+      const leagueId = job.data.leagueId as number;
+      await this.seedPlayersForLeague(leagueId);
+      return { success: true };
+    }
+
+    const requestedSeason = job.data.season as number | undefined;
+    this.logger.log(requestedSeason ? `Starting bootstrap for season ${requestedSeason}` : 'Starting bootstrap (auto-detecting season per league)');
+
+    await this.redis.delByPattern('api_football:cache:*');
+    this.logger.log('API-Football cache cleared');
 
     const failures: { leagueId: number; error: string }[] = [];
+    let resolvedSeason = requestedSeason;
 
     for (const leagueId of Object.values(LEAGUE_IDS)) {
       try {
+        const season = requestedSeason ?? await this.detectSeason(leagueId);
         await this.seedLeague(leagueId, season);
+        if (!resolvedSeason) resolvedSeason = season;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         this.logger.error(`Failed to seed league ${leagueId}: ${message}`, err instanceof Error ? err.stack : undefined);
@@ -74,7 +89,7 @@ export class BootstrapProcessor extends WorkerHost {
       }
     }
 
-    await this.seedTotalModeCompetition(season);
+    await this.seedTotalModeCompetition(resolvedSeason ?? new Date().getFullYear());
 
     if (failures.length > 0) {
       const failedIds = failures.map((f) => f.leagueId).join(', ');
@@ -99,7 +114,7 @@ export class BootstrapProcessor extends WorkerHost {
       return;
     }
 
-    const league = leagueData.response[0].league;
+    const { league, country: leagueCountry } = leagueData.response[0];
     const gwCount = LEAGUE_GW_COUNTS[leagueId] ?? 38;
 
     await this.prisma.competition.upsert({
@@ -107,7 +122,7 @@ export class BootstrapProcessor extends WorkerHost {
       create: {
         id: leagueId,
         realName: league.name,
-        country: league.country,
+        country: leagueCountry.name,
         season,
         type: CompetitionType.LEAGUE,
         leagueSlug: LEAGUE_SLUGS[leagueId],
@@ -116,7 +131,7 @@ export class BootstrapProcessor extends WorkerHost {
       },
       update: {
         realName: league.name,
-        country: league.country,
+        country: leagueCountry.name,
         season,
         gwCount,
         isActive: true,
@@ -125,6 +140,7 @@ export class BootstrapProcessor extends WorkerHost {
 
     await this.seedClubs(leagueId, season);
     await this.seedFixturesAndGameweeks(leagueId, season);
+    this.logger.log(`League ${leagueId} seeded. Players are fetched separately via /admin/sync/players/:leagueId`);
   }
 
   private async seedClubs(leagueId: number, season: number) {
@@ -153,8 +169,28 @@ export class BootstrapProcessor extends WorkerHost {
         },
       });
 
-      await this.seedPlayersForClub(item.team.id, leagueId, season);
     }
+  }
+
+  async seedPlayersForLeague(leagueId: number) {
+    // Find the competition to determine the season
+    const competition = await this.prisma.competition.findUnique({ where: { id: leagueId } });
+    if (!competition) {
+      throw new Error(`Competition ${leagueId} not found — run bootstrap first`);
+    }
+
+    const clubs = await this.prisma.club.findMany({ where: { competitionId: leagueId } });
+    if (!clubs.length) {
+      throw new Error(`No clubs found for competition ${leagueId} — run bootstrap first`);
+    }
+
+    this.logger.log(`Seeding players for league ${leagueId} (${clubs.length} clubs, season ${competition.season})`);
+
+    for (const club of clubs) {
+      await this.seedPlayersForClub(club.id, leagueId, competition.season);
+    }
+
+    this.logger.log(`Players seeded for league ${leagueId}`);
   }
 
   private async seedPlayersForClub(clubId: number, leagueId: number, season: number) {
@@ -239,7 +275,7 @@ export class BootstrapProcessor extends WorkerHost {
       // Deadline = earliest kickoff - 90 min
       const kickoffs = fixtures.map((f) => new Date(f.fixture.date).getTime());
       const earliest = new Date(Math.min(...kickoffs));
-      const deadline = new Date(earliest.getTime() - 90 * 60 * 1000);
+      const deadline = new Date(earliest.getTime() - DEADLINE_OFFSET_MINUTES * 60 * 1000);
 
       const gameweek = await this.prisma.gameweek.upsert({
         where: { competitionId_number: { competitionId: leagueId, number: gwNumber } },
@@ -284,6 +320,36 @@ export class BootstrapProcessor extends WorkerHost {
     if (firstScheduled) {
       await this.prisma.gameweek.update({ where: { id: firstScheduled.id }, data: { isCurrent: true } });
     }
+  }
+
+  private async detectSeason(leagueId: number): Promise<number> {
+    const data = await this.apiFootball.get<ApiFootballResponse<ApiLeague>>('/leagues', {
+      id: leagueId,
+      current: true,
+    });
+
+    if (!data.response.length) {
+      throw new Error(`Could not detect current season for league ${leagueId}`);
+    }
+
+    // Use the season flagged as current; fall back to year-1 if the plan doesn't cover it
+    const currentYear = data.response[0].seasons.find((s) => s.current)?.year;
+    if (!currentYear) {
+      throw new Error(`No current season found for league ${leagueId}`);
+    }
+
+    for (const year of [currentYear, currentYear - 1]) {
+      const teamsData = await this.apiFootball.get<ApiFootballResponse<{ team: { id: number } }>>('/teams', {
+        league: leagueId,
+        season: year,
+      });
+      if (teamsData.results > 0) {
+        this.logger.log(`Auto-detected season ${year} for league ${leagueId} (current flagged: ${currentYear})`);
+        return year;
+      }
+    }
+
+    throw new Error(`No season with data found for league ${leagueId} (tried ${currentYear} and ${currentYear - 1})`);
   }
 
   private async seedTotalModeCompetition(season: number) {
