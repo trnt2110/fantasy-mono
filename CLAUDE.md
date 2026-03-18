@@ -36,6 +36,7 @@ docker compose up -d                          # Start Postgres + Redis
 
 # From monorepo root
 pnpm install                                  # Install all workspaces
+pnpm --filter @fantasy/shared build           # Must run before apps/api can import shared
 
 # Database (from apps/api/)
 pnpm exec prisma migrate dev --name <desc>    # Create + apply migration
@@ -49,6 +50,8 @@ JWT_SECRET="test-secret" JWT_REFRESH_SECRET="test-refresh-secret" \
 PORT=3001 pnpm nest start
 
 pnpm start:dev                                # With file watching (same env vars needed)
+pnpm test                                     # Run all tests
+pnpm test -- --testPathPattern=auth           # Run a single test file
 pnpm exec tsc --noEmit                        # TypeScript check (no emit)
 
 # Frontend (from apps/web/) — proxies /api → localhost:3001
@@ -57,9 +60,13 @@ pnpm build                                    # Production build + SSG pre-rende
 pnpm preview                                  # Preview production build
 pnpm exec tsc --noEmit                        # TypeScript check
 
-# Seed football data (once, requires running API + admin JWT)
+# Seed football data (requires running API + admin JWT)
+# Step 1: seed competitions, clubs, fixtures/gameweeks (~15 API calls total)
 curl -X POST http://localhost:3001/admin/sync/bootstrap \
   -H "Authorization: Bearer <admin-jwt>"
+# Step 2: seed players per league (~40 API calls each — do one per day on free plan)
+curl -X POST http://localhost:3001/admin/sync/players/39 \
+  -H "Authorization: Bearer <admin-jwt>"   # 39=PL, 140=La Liga, 135=Serie A, 78=Bundesliga, 61=Ligue1
 ```
 
 ---
@@ -165,11 +172,15 @@ fixture-result-check (cron, 2h)
   → performance-sync (concurrency 2, per finished fixture)
     → gameweek-finalise (concurrency 1, when all fixtures done)
       → player-price-update (concurrency 1)
+
+player-sync (admin-triggered, per league)   ← standalone, not part of the chain
 ```
 
 `ScoringService.calculatePlayerPoints()` is the single source of truth for scoring, called inside `performance-sync`.
 
-### Frontend (`apps/api/web/`)
+`player-sync` jobs run on the same `season-bootstrap` queue as `bootstrap` jobs. The `BootstrapProcessor.process()` dispatches by `job.name` to handle both. Bootstrap only seeds clubs/fixtures — players are seeded separately via `POST /admin/sync/players/:leagueId` to stay within the 100 req/day API-Football free plan limit.
+
+### Frontend (`apps/web/`)
 
 All four pages (SquadSelection, PlayerSelection, Fixtures, Leagues) are fully wired to the real API via TanStack Query hooks in `src/api/hooks/`.
 
