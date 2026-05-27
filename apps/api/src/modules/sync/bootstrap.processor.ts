@@ -132,33 +132,42 @@ export class BootstrapProcessor extends WorkerHost {
   }
 
   private async seedLeague(leagueId: number, season: number): Promise<void> {
-    this.logger.log(`Seeding league ${leagueId}`);
+    this.logger.log(`[League ${leagueId}] Starting seed for season ${season}`);
 
     // ① Fetch all API data BEFORE opening the transaction (no HTTP calls inside tx)
+    this.logger.log(`[API] GET /leagues { id: ${leagueId}, season: ${season} }`);
     const leagueData = await this.apiFootball.get<ApiFootballResponse<ApiLeague>>('/leagues', {
       id: leagueId,
       season,
     });
+    this.logger.log(`[API] /leagues response: ${leagueData.results} result(s) errors=${JSON.stringify(leagueData.errors)}`);
 
     if (!leagueData.response.length) {
       this.logger.warn(`No data for league ${leagueId}`);
       return;
     }
 
+    const { league, country: leagueCountry } = leagueData.response[0];
+    this.logger.log(`[API] League resolved: "${league.name}" (${leagueCountry.name})`);
+
+    this.logger.log(`[API] GET /teams { league: ${leagueId}, season: ${season} }`);
     const teamsData = await this.apiFootball.get<ApiFootballResponse<ApiTeam>>('/teams', {
       league: leagueId,
       season,
     });
+    this.logger.log(`[API] /teams response: ${teamsData.results} team(s) errors=${JSON.stringify(teamsData.errors)} — ${teamsData.response.map((t) => t.team.name).join(', ')}`);
 
+    this.logger.log(`[API] GET /fixtures { league: ${leagueId}, season: ${season} }`);
     const fixturesData = await this.apiFootball.get<ApiFootballResponse<ApiFixture>>('/fixtures', {
       league: leagueId,
       season,
     });
+    this.logger.log(`[API] /fixtures response: ${fixturesData.results} fixture(s)`);
 
-    const { league, country: leagueCountry } = leagueData.response[0];
     const gwCount = LEAGUE_GW_COUNTS[leagueId] ?? 38;
 
     // ② All DB writes in a single atomic transaction
+    this.logger.log(`[DB] Starting transaction for league ${leagueId}`);
     await this.prisma.$transaction(
       async (tx) => {
         await tx.competition.upsert({
@@ -175,6 +184,7 @@ export class BootstrapProcessor extends WorkerHost {
           },
           update: { realName: league.name, country: leagueCountry.name, season, gwCount, isActive: true },
         });
+        this.logger.log(`[DB] Competition upserted: id=${leagueId} "${league.name}" season=${season} gwCount=${gwCount}`);
 
         await this.seedClubsFromData(teamsData, leagueId, tx);
         await this.seedFixturesFromData(fixturesData, leagueId, tx);
@@ -182,7 +192,7 @@ export class BootstrapProcessor extends WorkerHost {
       { timeout: 60_000 },
     );
 
-    this.logger.log(`League ${leagueId} seeded. Players are fetched separately via /admin/sync/players/:leagueId`);
+    this.logger.log(`[League ${leagueId}] Seed complete. Players seeded separately via /admin/sync/players/${leagueId}`);
   }
 
   private async seedClubsFromData(
@@ -191,10 +201,11 @@ export class BootstrapProcessor extends WorkerHost {
     tx: Prisma.TransactionClient,
   ): Promise<void> {
     if (!teamsData.response.length) {
-      this.logger.warn(`No teams found for league ${leagueId}`);
+      this.logger.warn(`[DB] No teams to seed for league ${leagueId}`);
       return;
     }
 
+    this.logger.log(`[DB] Seeding ${teamsData.response.length} clubs for league ${leagueId}`);
     for (const item of teamsData.response) {
       await tx.club.upsert({
         where: { id: item.team.id },
@@ -209,11 +220,12 @@ export class BootstrapProcessor extends WorkerHost {
           logoUrl: item.team.logo,
         },
       });
+      this.logger.log(`[DB] Club upserted: id=${item.team.id} "${item.team.name}"`);
     }
+    this.logger.log(`[DB] ${teamsData.response.length} clubs seeded for league ${leagueId}`);
   }
 
   async seedPlayersForLeague(leagueId: number) {
-    // Find the competition to determine the season
     const competition = await this.prisma.competition.findUnique({ where: { id: leagueId } });
     if (!competition) {
       throw new Error(`Competition ${leagueId} not found — run bootstrap first`);
@@ -224,20 +236,25 @@ export class BootstrapProcessor extends WorkerHost {
       throw new Error(`No clubs found for competition ${leagueId} — run bootstrap first`);
     }
 
-    this.logger.log(`Seeding players for league ${leagueId} (${clubs.length} clubs, season ${competition.season})`);
+    this.logger.log(`[Players] Seeding league ${leagueId} — ${clubs.length} clubs, season ${competition.season}`);
 
+    let totalSeeded = 0;
     for (const club of clubs) {
-      await this.seedPlayersForClub(club.id, leagueId, competition.season);
+      const count = await this.seedPlayersForClub(club.id, leagueId, competition.season);
+      totalSeeded += count;
+      this.logger.log(`[Players] Club ${club.id} "${club.realName}": ${count} players seeded (running total: ${totalSeeded})`);
     }
 
-    this.logger.log(`Players seeded for league ${leagueId}`);
+    this.logger.log(`[Players] League ${leagueId} complete — ${totalSeeded} players seeded across ${clubs.length} clubs`);
   }
 
-  private async seedPlayersForClub(clubId: number, leagueId: number, season: number) {
+  private async seedPlayersForClub(clubId: number, leagueId: number, season: number): Promise<number> {
     let page = 1;
     let totalPages = 1;
+    let seededCount = 0;
 
     do {
+      this.logger.log(`[API] GET /players { team: ${clubId}, season: ${season}, page: ${page} }`);
       const playersData = await this.apiFootball.get<ApiFootballResponse<ApiPlayer>>('/players', {
         team: clubId,
         season,
@@ -245,14 +262,21 @@ export class BootstrapProcessor extends WorkerHost {
       });
 
       totalPages = playersData.paging?.total ?? 1;
+      this.logger.log(`[API] /players response: ${playersData.results} player(s) on page ${page}/${totalPages}`);
 
       for (const item of playersData.response) {
         const stat = item.statistics?.[0];
-        if (!stat) continue;
+        if (!stat) {
+          this.logger.warn(`[Players] Skipping player id=${item.player.id} "${item.player.name}" — no statistics`);
+          continue;
+        }
 
         const rawPosition = stat.games?.position;
         const position = POSITION_MAP[rawPosition];
-        if (!position) continue;
+        if (!position) {
+          this.logger.warn(`[Players] Skipping player id=${item.player.id} "${item.player.name}" — unmapped position "${rawPosition}"`);
+          continue;
+        }
 
         await this.prisma.player.upsert({
           where: { id: item.player.id },
@@ -274,12 +298,17 @@ export class BootstrapProcessor extends WorkerHost {
         await this.prisma.playerCompetitionPrice.upsert({
           where: { playerId_competitionId: { playerId: item.player.id, competitionId: leagueId } },
           create: { playerId: item.player.id, competitionId: leagueId, currentPrice: defaultPrice },
-          update: {},  // never overwrite admin-adjusted prices on re-sync
+          update: {},
         });
+
+        this.logger.log(`[DB] Player upserted: id=${item.player.id} "${item.player.name}" pos=${position} price=${defaultPrice}`);
+        seededCount++;
       }
 
       page++;
     } while (page <= totalPages);
+
+    return seededCount;
   }
 
   private async seedFixturesFromData(
@@ -307,6 +336,8 @@ export class BootstrapProcessor extends WorkerHost {
       return numA - numB;
     });
 
+    this.logger.log(`[DB] Seeding ${rounds.length} gameweeks, ${fixturesData.results} fixtures for league ${leagueId}`);
+
     for (let i = 0; i < rounds.length; i++) {
       const round = rounds[i];
       const gwNumber = i + 1;
@@ -321,6 +352,8 @@ export class BootstrapProcessor extends WorkerHost {
         create: { competitionId: leagueId, number: gwNumber, deadlineTime: deadline },
         update: { deadlineTime: deadline },
       });
+
+      this.logger.log(`[DB] GW${gwNumber} upserted: id=${gameweek.id} round="${round}" deadline=${deadline.toISOString()} fixtures=${fixtures.length}`);
 
       for (const f of fixtures) {
         await tx.fixture.upsert({
@@ -342,6 +375,7 @@ export class BootstrapProcessor extends WorkerHost {
             awayGoals: f.goals.away,
           },
         });
+        this.logger.log(`[DB] Fixture upserted: id=${f.fixture.id} home=${f.teams.home.id} away=${f.teams.away.id} kickoff=${f.fixture.date} status=${f.fixture.status.short}`);
       }
     }
 
@@ -358,6 +392,9 @@ export class BootstrapProcessor extends WorkerHost {
 
     if (firstScheduled) {
       await tx.gameweek.update({ where: { id: firstScheduled.id }, data: { isCurrent: true } });
+      this.logger.log(`[DB] Current GW marked: id=${firstScheduled.id} number=${firstScheduled.number} for competition ${competitionId}`);
+    } else {
+      this.logger.warn(`[DB] No unfinished gameweek found for competition ${competitionId} — isCurrent not set`);
     }
   }
 
@@ -370,10 +407,12 @@ export class BootstrapProcessor extends WorkerHost {
       return year;
     }
 
+    this.logger.log(`[API] GET /leagues { id: ${leagueId}, current: true } (season detection)`);
     const data = await this.apiFootball.get<ApiFootballResponse<ApiLeague>>('/leagues', {
       id: leagueId,
       current: true,
     });
+    this.logger.log(`[API] /leagues (detect) response: ${data.results} result(s) errors=${JSON.stringify(data.errors)}`);
 
     if (!data.response.length) {
       throw new Error(`Could not detect current season for league ${leagueId}`);
@@ -386,12 +425,14 @@ export class BootstrapProcessor extends WorkerHost {
     }
 
     for (const year of [currentYear, currentYear - 1]) {
+      this.logger.log(`[API] GET /teams { league: ${leagueId}, season: ${year} } (season probe)`);
       const teamsData = await this.apiFootball.get<ApiFootballResponse<{ team: { id: number } }>>('/teams', {
         league: leagueId,
         season: year,
       });
+      this.logger.log(`[API] /teams (probe) season=${year}: ${teamsData.results} team(s) errors=${JSON.stringify(teamsData.errors)}`);
       if (teamsData.results > 0) {
-        this.logger.log(`Auto-detected season ${year} for league ${leagueId} (current flagged: ${currentYear})`);
+        this.logger.log(`[Season] Auto-detected season ${year} for league ${leagueId} (current flagged: ${currentYear})`);
         await this.redis.set(cacheKey, String(year), SEASON_CACHE_TTL_SECONDS);
         return year;
       }

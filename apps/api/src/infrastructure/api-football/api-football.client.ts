@@ -7,6 +7,8 @@ const CACHE_TTL_SECONDS = 60 * 60; // 60 minutes
 const DAILY_LIMIT_HARD = 95;
 const DAILY_LIMIT_WARN = 80;
 const RATE_LIMIT_KEY_PREFIX = 'api_football:requests:';
+const RATE_LIMIT_RETRY_DELAY_MS = 60_000; // wait 60s on 429 before retry (free plan resets per minute)
+const RATE_LIMIT_MAX_RETRIES = 4;
 
 @Injectable()
 export class ApiFootballClient {
@@ -37,20 +39,46 @@ export class ApiFootballClient {
 
     await this.checkRateLimit();
 
-    let response;
-    try {
-      response = await this.http.get<T>(path, { params });
-    } catch (err: any) {
-      const status = err?.response?.status;
-      const body = err?.response?.data;
-      this.logger.error(`API-Football ${status} on ${path} params=${JSON.stringify(params)} body=${JSON.stringify(body)}`);
-      throw err;
+    let lastErr: any;
+    for (let attempt = 1; attempt <= RATE_LIMIT_MAX_RETRIES; attempt++) {
+      try {
+        const response = await this.http.get<T>(path, { params });
+        const data = response.data as any;
+
+        // API-Football sometimes returns HTTP 200 with errors.rateLimit instead of 429
+        if (data?.errors?.rateLimit) {
+          const waitSec = (RATE_LIMIT_RETRY_DELAY_MS / 1000) * attempt;
+          this.logger.warn(
+            `API-Football soft rate limit on ${path} (attempt ${attempt}/${RATE_LIMIT_MAX_RETRIES}) — waiting ${waitSec}s before retry`,
+          );
+          lastErr = new Error(`API-Football rate limit: ${data.errors.rateLimit}`);
+          await new Promise((resolve) => setTimeout(resolve, waitSec * 1000));
+          continue;
+        }
+
+        await this.redis.set(cacheKey, JSON.stringify(data), CACHE_TTL_SECONDS);
+        return data as T;
+      } catch (err: any) {
+        const status = err?.response?.status;
+        const body = err?.response?.data;
+        lastErr = err;
+
+        if (status === 429) {
+          const waitSec = (RATE_LIMIT_RETRY_DELAY_MS / 1000) * attempt;
+          this.logger.warn(
+            `API-Football 429 on ${path} (attempt ${attempt}/${RATE_LIMIT_MAX_RETRIES}) — waiting ${waitSec}s before retry`,
+          );
+          await new Promise((resolve) => setTimeout(resolve, waitSec * 1000));
+          continue;
+        }
+
+        this.logger.error(`API-Football ${status} on ${path} params=${JSON.stringify(params)} body=${JSON.stringify(body)}`);
+        throw err;
+      }
     }
-    const data = response.data;
 
-    await this.redis.set(cacheKey, JSON.stringify(data), CACHE_TTL_SECONDS);
-
-    return data;
+    this.logger.error(`API-Football rate limit on ${path} — exhausted ${RATE_LIMIT_MAX_RETRIES} retries`);
+    throw lastErr;
   }
 
   private async checkRateLimit(): Promise<void> {

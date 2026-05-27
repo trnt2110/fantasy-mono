@@ -1,7 +1,7 @@
 # Fantasy Football Game — Technical Design
 
 > **Living document.** Updated at the end of each implementation phase to reflect what was actually built.
-> Last updated: Phase 4a (frontend scaffolding)
+> Last updated: Phase 6 (data seeding) — 2026-05-26
 
 ---
 
@@ -28,7 +28,7 @@
 
 ```
 fantasy/
-├── package.json                  # npm workspaces root
+├── package.json                  # pnpm workspaces root (pnpm-workspace.yaml)
 ├── docker-compose.yml            # PostgreSQL + Redis
 ├── .env.example
 ├── .gitignore
@@ -72,40 +72,51 @@ fantasy/
     │           ├── prisma/               # PrismaService
     │           ├── redis/                # RedisService
     │           └── api-football/         # ApiFootballClient
-    └── web/                              # Phase 4a scaffolded — all mock data, no API wiring yet
+    └── web/                              # Phase 4b + 5 complete — fully wired to real API
         ├── index.html                    # Loads Bangers + Nunito from Google Fonts
         ├── tailwind.config.js            # Custom game.* colors, Bangers/Nunito font families
-        ├── vite.config.ts
+        ├── vite.config.ts                # Vite 8; proxy /api → localhost:3001; closeBundle SSG plugin
         └── src/
-            ├── main.tsx                  # QueryClientProvider + BrowserRouter setup
-            ├── App.tsx                   # Responsive shell: Sidebar (lg) + BottomNav (mobile)
-            ├── index.css                 # Tailwind + game-card, btn-primary, pos-badge, pitch-bg
-            ├── data/
-            │   └── mock.ts               # TEMPORARY: mock players, fixtures, leaderboard
-            │                             # Types here define expected API response shapes
+            ├── main.tsx                  # QueryClientProvider + BrowserRouter + HelmetProvider
+            ├── App.tsx                   # Routes: Landing (/), Login, Register, ProtectedRoute → AppShell
+            ├── index.css                 # Tailwind + game-card, btn-primary, pos-badge, pitch-bg, scanlines
+            ├── api/
+            │   ├── client.ts             # axios instance; JWT Bearer interceptor; 401 refresh retry (queue pattern)
+            │   ├── types.ts              # API response types (ApiPlayer, ApiFixture, etc.)
+            │   └── hooks/
+            │       ├── useAuth.ts        # login, register, logout mutations
+            │       ├── useClubs.ts       # useClubs, useClubsMap (Map<clubId, shortName>)
+            │       ├── useCurrentGameweek.ts
+            │       ├── useSquad.ts       # useMyFantasyTeam, useGwPicks, useSubmitPicks
+            │       ├── usePlayers.ts     # paginated list + usePlayerDetail
+            │       ├── usePlayerPerformances.ts
+            │       ├── useFixtures.ts
+            │       ├── useLeaderboard.ts # useGlobalLeaderboard
+            │       └── useFantasyLeagues.ts  # useMyLeagues, useLeagueStandings, useJoinLeague, useCreateLeague
+            ├── store/
+            │   ├── auth.store.ts         # Zustand persist: accessToken, refreshToken, user, fantasyTeamId, competitionId, budget
+            │   └── draft.store.ts        # Zustand ephemeral: playerIn/playerOut staging
             ├── pages/
-            │   ├── SquadSelection.tsx    # Pitch view + list view; two-panel on desktop
-            │   ├── PlayerSelection.tsx   # Player list + filter sidebar on desktop
-            │   ├── Fixtures.tsx          # GW nav + 2-col fixture grid on desktop
-            │   └── Leagues.tsx           # Stats summary + leaderboard + join panel
+            │   ├── Landing.tsx           # Public; SSG pre-rendered; react-helmet-async meta tags
+            │   ├── Login.tsx
+            │   ├── Register.tsx
+            │   ├── SquadSelection.tsx    # Pitch view + list view; real picks from useGwPicks
+            │   ├── PlayerSelection.tsx   # Player list + filters; real data from usePlayers
+            │   ├── Fixtures.tsx          # GW fixtures; real data from useFixtures
+            │   └── Leagues.tsx           # Leaderboard + mini-leagues; real data from useLeaderboard
+            ├── data/
+            │   └── mock.ts               # Retained for reference; no longer used by pages
             └── components/
-                ├── Sidebar.tsx           # Desktop nav (lg:, w-64 fixed left)
+                ├── AppShell.tsx          # Responsive shell: Sidebar (lg) + BottomNav (mobile)
+                ├── Sidebar.tsx           # Desktop nav; wired to useCurrentGameweek + auth.store
                 ├── BottomNav.tsx         # Mobile nav (lg:hidden, fixed bottom)
+                ├── ProtectedRoute.tsx    # Redirects to /login if no accessToken
+                ├── DeadlineCountdown.tsx # Live countdown (setInterval); "DEADLINE PASSED" after deadline
+                ├── ErrorBoundary.tsx     # Class component; global + per-page QueryErrorResetBoundary
                 └── ui/
-                    ├── JerseyIcon.tsx    # Club-colored jersey placeholder (3-letter badge)
-                    └── PosBadge.tsx      # Position pill: GKP/DEF/MID/FWD with colors
-
-            # TO BE ADDED in Phase 4b:
-            # ├── api/
-            # │   ├── client.ts           # axios + JWT interceptor + refresh retry
-            # │   └── hooks/              # useSquad, usePlayers, useFixtures, useLeague*
-            # ├── store/
-            # │   ├── auth.store.ts       # accessToken, user, setAuth, clearAuth
-            # │   └── draft.store.ts      # pending transfer staging
-            # └── pages/
-            #     ├── Login.tsx / Register.tsx
-            #     ├── Dashboard.tsx       # GW pts, rank, deadline countdown
-            #     └── PlayerDetail.tsx    # Performance history + points breakdown
+                    ├── JerseyIcon.tsx    # Club-colored jersey; 3-letter badge from useClubsMap
+                    ├── PosBadge.tsx      # Position pill: GKP/DEF/MID/FWD with colors
+                    └── Skeleton.tsx      # animate-pulse bg-white/5 primitive; used on all pages
 ```
 
 ---
@@ -161,8 +172,8 @@ API_FOOTBALL_BASE_URL=https://v3.football.api-sports.io
 
 # App
 NODE_ENV=development
-PORT=3000
-FRONTEND_URL=http://localhost:5173
+PORT=3001
+FRONTEND_URL=http://localhost:5174
 ```
 
 ---
@@ -171,23 +182,31 @@ FRONTEND_URL=http://localhost:5173
 
 ```bash
 # 1. Start infrastructure
-docker-compose up -d
+docker compose up -d        # Postgres on :5432, Redis on :6379
 
 # 2. Install dependencies
-pnpm install         # from monorepo root (workspaces)
+pnpm install                # from monorepo root
 
-# 3. Run migrations
-cd apps/api && npx prisma migrate dev
+# 3. Build shared package (required before API can import from it)
+pnpm --filter @fantasy/shared build
 
-# 4. Seed football data (run once, admin endpoint)
-curl -X POST http://localhost:3000/admin/sync/bootstrap \
+# 4. Run migrations
+cd apps/api && pnpm exec prisma migrate dev
+
+# 5. Start API (development, port 3001)
+cd apps/api && pnpm start:dev
+
+# 6. Start frontend (development, port 5173/5174)
+cd apps/web && pnpm dev
+
+# 7. Seed football data (one-time; requires admin JWT)
+# Step 1 — bootstrap: competitions, clubs, fixtures, gameweeks (~15 API calls)
+curl -X POST http://localhost:3001/admin/sync/bootstrap \
   -H "Authorization: Bearer <admin-jwt>"
-
-# 5. Start API (development)
-cd apps/api && npm run start:dev
-
-# 6. Start frontend (development)
-cd apps/web && npm run dev
+# Step 2 — players: one league per day on free plan (~40 API calls each)
+curl -X POST http://localhost:3001/admin/sync/players/39 \
+  -H "Authorization: Bearer <admin-jwt>"
+# League IDs: 39=PL, 140=La Liga, 135=Serie A, 78=Bundesliga, 61=Ligue1
 ```
 
 ---
@@ -265,7 +284,7 @@ Single VPS (2 CPU, 4GB RAM) with Docker Compose is sufficient for this scale.
 ```
 VPS
 ├── docker-compose.yml
-│   ├── api (NestJS — port 3000)
+│   ├── api (NestJS — port 3001)
 │   ├── web (Nginx serving static Vite build — port 80/443)
 │   ├── postgres (port 5432, internal only)
 │   └── redis (port 6379, internal only)
