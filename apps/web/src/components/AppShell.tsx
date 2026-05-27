@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Navigate } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { BottomNav } from './BottomNav'
 import { SquadSelection } from '../pages/SquadSelection'
@@ -13,7 +14,9 @@ export function AppShell() {
   const [page, setPage] = useState('squad')
   const user = useAuthStore(s => s.user)
   const budget = useAuthStore(s => s.budget)
-  useMyFantasyTeam()  // prefetch on shell mount
+  const { isError, error } = useMyFantasyTeam()
+  const isNoTeam = isError && (error as any)?.response?.status === 404
+  if (isNoTeam) return <Navigate to="/onboarding" replace />
 
   return (
     <ErrorBoundary>

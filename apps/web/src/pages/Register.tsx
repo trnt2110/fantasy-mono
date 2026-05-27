@@ -22,7 +22,7 @@ export function Register() {
           login(
             { email, password },
             {
-              onSuccess: () => navigate('/'),
+              onSuccess: () => navigate('/onboarding'),
               onError: () => navigate('/login'),
             }
           )
