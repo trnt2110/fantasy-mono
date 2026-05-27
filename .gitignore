@@ -35,4 +35,10 @@ Thumbs.db
 *.swp
 *.swo
 
+# Claude Code — local MCP config (contains DB credentials)
+.claude/settings.json
+
+# Superpowers brainstorming sessions
+.superpowers/
+
 # Prisma - migrations ARE tracked (intentionally not ignored)
