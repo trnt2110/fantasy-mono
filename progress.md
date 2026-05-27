@@ -222,6 +222,55 @@ Verification checklist:
 
 ---
 
+## Phase 6 — Data Seeding (Bootstrap + Player Sync) 🔄
+
+**Started:** 2026-05-25
+
+**Goal:** Seed real football data from API-Football into the running database.
+
+### Bootstrap ✅ (2026-05-25)
+
+Competitions, clubs, fixtures, and gameweeks successfully seeded for all 5 leagues.
+
+**Seeded data:**
+| League | ID | Season | Clubs | Gameweeks |
+|---|---|---|---|---|
+| Premier League | 39 | 2024 | 20 | 38 |
+| La Liga | 140 | 2024 | 20 | 38 |
+| Serie A | 135 | 2024 | 20 | 38 |
+| Bundesliga | 78 | 2024 | 34 | 34 |
+| Ligue 1 | 61 | 2024 | 19 | 34 |
+| Total Mode | 0 | 2024 | — | — |
+
+**Bugs fixed during bootstrap:**
+- `apps/api/.env` had `PORT=3000`; Vite proxy targets 3001 — fixed to 3001
+- `ApiFootballClient` only retried on HTTP 429 but API-Football also returns HTTP 200 with `errors.rateLimit` body on soft rate limit — added body-level rateLimit check with same retry logic
+- Added detailed `[API]` / `[DB]` logging throughout `BootstrapProcessor` for visibility
+
+**Known API plan limitation:**
+- Free plan only covers seasons 2022–2024. Season 2025 returns `errors: { plan: "Free plans do not have access to this season, try from 2022 to 2024." }` with HTTP 200 and 0 results.
+- Bootstrap auto-detects the latest available season (2024) correctly — no code change needed.
+- Upgrading to a paid API-Football plan would allow season 2025 data.
+
+### Player Sync ⏳ (upcoming)
+
+Players are seeded separately to stay within the 100 req/day free plan limit (~40 calls per league).
+
+Tasks:
+- [x] Run `POST /admin/sync/players/39` (Premier League) — 1129 players seeded across 20 clubs (2026-05-26)
+- [ ] Run `POST /admin/sync/players/140` (La Liga) — hit daily quota (96/95) mid-sync on 2026-05-26; re-run tomorrow
+- [ ] Run `POST /admin/sync/players/135` (Serie A)
+- [ ] Run `POST /admin/sync/players/78` (Bundesliga)
+- [ ] Run `POST /admin/sync/players/61` (Ligue 1)
+
+Do one league per day on the free plan.
+
+### Known Issues / Remaining Tasks
+
+- [ ] **Error responses are cached**: `ApiFootballClient` caches all HTTP 200 responses including those with `errors.plan` or other API-level errors. These should not be stored in Redis. Fix: skip `redis.set` when `data.errors` is non-empty.
+
+---
+
 ## Blocking Issues
 
 None currently.

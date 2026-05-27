@@ -8,13 +8,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Season-long FPL-style fantasy football game covering the top 5 European leagues (Premier League, La Liga, Serie A, Bundesliga, Ligue 1). Users manage a squad of 15 players, make weekly transfers, and earn points from real post-match player performances.
 
-**Implementation status:** See `progress.md` for what is built vs. planned. All phases (1–5) are complete.
+**Implementation status:** Phases 1–5 complete. Phase 6 (real data seeding) in progress — see `progress.md`.
 
 ---
 
 ## Living Design Documents
 
-**MANDATORY: Read ALL of these before starting any implementation task.** They are the authoritative source of truth and are updated after each implementation phase. Do not write a single line of code until you have re-read every document below in the current session.
+**MANDATORY: Read ALL of these at the start of every session, before any task — implementation, debugging, planning, Q&A, or exploration.** They are the authoritative source of truth and are updated after each phase. Do not take any action until you have re-read every document below in the current session.
 
 | File | Contents |
 |---|---|
@@ -44,12 +44,7 @@ pnpm exec prisma migrate deploy               # Apply pending migrations (prod)
 pnpm exec prisma studio                       # DB browser
 
 # API (from apps/api/) — runs on port 3001
-DATABASE_URL="postgresql://fantasy_user:fantasy_pass@localhost:5432/fantasy" \
-REDIS_URL="redis://localhost:6379" \
-JWT_SECRET="test-secret" JWT_REFRESH_SECRET="test-refresh-secret" \
-PORT=3001 pnpm nest start
-
-pnpm start:dev                                # With file watching (same env vars needed)
+pnpm start:dev                                # .env is configured; reads DB/Redis/JWT/API key automatically
 pnpm exec tsc --noEmit                        # TypeScript check (no emit)
 
 # Frontend (from apps/web/) — proxies /api → localhost:3001
@@ -57,6 +52,12 @@ pnpm dev                                      # Vite dev server on :5173
 pnpm build                                    # Production build + SSG pre-render
 pnpm preview                                  # Preview production build
 pnpm exec tsc --noEmit                        # TypeScript check
+
+# Tests (from apps/api/) — Jest + ts-jest, files matching *.spec.ts
+pnpm test                                     # Run all tests
+pnpm test:watch                               # Watch mode
+pnpm test -- --testPathPattern=scoring        # Run a single test file by name pattern
+pnpm test -- --testNamePattern="calculates"   # Run tests matching a describe/it name
 
 # Seed football data (once, requires running API + admin JWT)
 # Step 1: seed competitions, clubs, fixtures/gameweeks (~15 API calls total)
@@ -223,4 +224,6 @@ All four pages (SquadSelection, PlayerSelection, Fixtures, Leagues) are fully wi
 
 ### API-Football Rate Limiting
 
-Redis counter `api_football:requests:{date}` tracks daily usage. The `ApiFootballClient` throws `ServiceUnavailableException` at >95 requests and logs WARN at >80. All responses are cached for 60 minutes.
+Redis counter `api_football:requests:{date}` tracks daily usage (throws at >95, warns at >80). Per-minute limit (free plan: 10 req/min): both HTTP 429 and HTTP 200 with `errors.rateLimit` body trigger retry with 60s × attempt backoff (max 4 retries). Free plan covers seasons 2022–2024 only; season 2025+ returns `errors.plan` with 0 results. All responses cached 60 min.
+
+**Known issue:** error responses (`errors.plan`, etc.) are currently cached — fix pending.

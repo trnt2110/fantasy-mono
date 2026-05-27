@@ -1,7 +1,7 @@
 # Fantasy Football Game — Database Design
 
 > **Living document.** Updated at the end of each implementation phase to reflect what was actually built.
-> Last updated: Phase 0 (refined 2026-03-10)
+> Last updated: Phase 6 (data seeding) — 2026-05-26
 
 ---
 

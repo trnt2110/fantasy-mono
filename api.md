@@ -1,13 +1,13 @@
 # Fantasy Football Game — API Design
 
 > **Living document.** Updated at the end of each implementation phase to reflect what was actually built.
-> Last updated: Phase 0 (refined 2026-03-10)
+> Last updated: Phase 6 (data seeding) — 2026-05-26
 
 ---
 
 ## Base URL
 
-- Development: `http://localhost:3000`
+- Development: `http://localhost:3001`
 - Production: `https://api.yourdomain.com`
 
 ---
@@ -428,14 +428,21 @@ If `gameweekId` is omitted, returns current GW standings. `gwPoints` reflects th
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/admin/aliases` | `?unaliasedOnly=true` — list entities needing in-game names |
-| PATCH | `/admin/aliases/competition/:id` | Set competition alias `{ name, shortName }` |
-| PATCH | `/admin/aliases/club/:id` | Set club alias `{ name, shortName, city }` |
-| PATCH | `/admin/aliases/player/:id` | Set player alias `{ name }` |
-| POST | `/admin/aliases/bulk` | Bulk import via CSV body |
-| POST | `/admin/sync/bootstrap` | Trigger season bootstrap job |
+| GET | `/admin/aliases` | All un-aliased entities summary |
+| GET | `/admin/aliases/clubs` | List clubs (filter `?unaliasedOnly=true`) |
+| GET | `/admin/aliases/players` | List players (filter `?unaliasedOnly=true`) |
+| GET | `/admin/aliases/competitions` | List competitions |
+| PUT | `/admin/aliases/clubs/:id` | Set club alias `{ name, shortName, city }` |
+| DELETE | `/admin/aliases/clubs/:id` | Remove club alias |
+| PUT | `/admin/aliases/players/:id` | Set player alias `{ name }` |
+| DELETE | `/admin/aliases/players/:id` | Remove player alias |
+| PUT | `/admin/aliases/competitions/:id` | Set competition alias `{ name, shortName }` |
+| DELETE | `/admin/aliases/competitions/:id` | Remove competition alias |
+| POST | `/admin/sync/bootstrap` | Trigger season bootstrap job `{ season?, force? }` |
+| POST | `/admin/sync/players/:leagueId` | Trigger player sync for one league (~40 API calls) |
 | POST | `/admin/sync/fixture/:id` | Manually trigger performance-sync for a fixture |
-| GET | `/admin/sync/status` | View BullMQ job queue status |
+| GET | `/admin/sync/status` | View BullMQ job queue stats |
+| GET | `/admin/sync/rate-limit` | View today's API-Football request count |
 
 ---
 
@@ -508,18 +515,26 @@ return this.aliasService.resolvePlayer(player, competitionId);
 ## Rate Limit Protection (API-Football Client)
 
 ```
-Redis key: api_football:requests:{YYYY-MM-DD}
-  INCR on each outbound request
-  Set TTL to end of day (86400s from midnight)
+Daily limit (Redis key: api_football:requests:{YYYY-MM-DD}):
+  INCR on each outbound request (EXPIRE NX set to end of day)
+  if count > 95 → throw ServiceUnavailableException (503)
+  if count > 80 → log.warn
 
-On request:
-  if count > 95 → throw RateLimitException (503)
-  if count > 80 → log.warn("API-Football daily limit at 80%")
+Per-minute limit (free plan: 10 req/min):
+  API returns either HTTP 429 OR HTTP 200 with { errors: { rateLimit: "..." } }
+  Both cases trigger retry with backoff: 60s × attempt (attempt 1 = 60s, attempt 2 = 120s, ...)
+  Max 4 retries before throwing
 
 Response caching:
-  Key: api_football:cache:{sha256(endpoint + JSON.stringify(params))}
+  Key: api_football:cache:{path}{JSON.stringify(params)}
   TTL: 3600 seconds (60 min)
   Strategy: cache-aside (check before request, store after successful response)
+  Note: responses with errors.plan or other API-level errors are also cached (known issue — fix pending)
+
+Season availability (free plan):
+  Free plan covers seasons 2022–2024 only
+  Season 2025+ returns HTTP 200 with { errors: { plan: "Free plans do not have access to this season..." } }
+  Bootstrap auto-detects the latest available season (2024 as of 2026)
 ```
 
 ---
@@ -534,7 +549,8 @@ Response caching:
 | `gameweek:current:{competitionId}` | 2 min | fixture-result-check job |
 | `leaderboard:global:{compId}:{gwId}:{page}` | 5 min | gameweek-finalise job |
 | `leaderboard:league:{id}:{gwId}` | 5 min | gameweek-finalise job |
-| `api_football:cache:{hash}` | 60 min | Never (external API cache) |
+| `clubs:competition:{competitionId}` | 10 min | — |
+| `api_football:cache:{path}{params}` | 60 min | Never (external API cache) |
 
 **Cache implementation:** `RedisService.getOrSet(key, ttl, fetchFn)` — checked in service layer, not controller layer.
 
