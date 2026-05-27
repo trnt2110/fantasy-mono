@@ -1,7 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useRegister, useLogin } from '../api/hooks'
-import { useAuthStore } from '../store/auth.store'
 
 export function Register() {
   const [email, setEmail] = useState('')
@@ -10,8 +9,6 @@ export function Register() {
   const navigate = useNavigate()
   const { mutate: register, isPending, error } = useRegister()
   const { mutate: login } = useLogin()
-  const accessToken = useAuthStore(s => s.accessToken)
-  useEffect(() => { if (accessToken) navigate('/') }, [accessToken, navigate])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
