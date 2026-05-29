@@ -40,6 +40,35 @@ export interface ResolvedCompetition {
   isAliased: boolean;
 }
 
+export interface AdminResolvedClub {
+  id: number;
+  realName: string;
+  name: string;
+  shortName?: string;
+  city?: string;
+  competitionId: number;
+  isAliased: boolean;
+}
+
+export interface AdminResolvedPlayer {
+  id: number;
+  realName: string;
+  name: string;
+  position: string;
+  clubId: number;
+  clubRealName?: string;
+  isAliased: boolean;
+}
+
+export interface AdminResolvedCompetition {
+  id: number;
+  realName: string;
+  name: string;
+  shortName?: string;
+  country: string;
+  isAliased: boolean;
+}
+
 @Injectable()
 export class AliasService {
   constructor(private readonly prisma: PrismaService) {}
@@ -80,6 +109,41 @@ export class AliasService {
       leagueSlug: competition.leagueSlug ?? undefined,
       gwCount: competition.gwCount,
       isActive: competition.isActive,
+      isAliased: !!competition.alias,
+    };
+  }
+
+  resolveClubForAdmin(club: ClubWithAlias): AdminResolvedClub {
+    return {
+      id: club.id,
+      realName: club.realName,
+      name: club.alias?.name ?? '[Unnamed]',
+      shortName: club.alias?.shortName ?? undefined,
+      city: club.alias?.city ?? undefined,
+      competitionId: club.competitionId,
+      isAliased: !!club.alias,
+    };
+  }
+
+  resolvePlayerForAdmin(player: PlayerWithAlias): AdminResolvedPlayer {
+    return {
+      id: player.id,
+      realName: player.realName,
+      name: player.alias?.name ?? '[Unnamed]',
+      position: player.position,
+      clubId: player.clubId,
+      clubRealName: player.club?.realName ?? undefined,
+      isAliased: !!player.alias,
+    };
+  }
+
+  resolveCompetitionForAdmin(competition: CompetitionWithAlias): AdminResolvedCompetition {
+    return {
+      id: competition.id,
+      realName: competition.realName,
+      name: competition.alias?.name ?? '[Unnamed]',
+      shortName: competition.alias?.shortName ?? undefined,
+      country: competition.country,
       isAliased: !!competition.alias,
     };
   }
