@@ -19,6 +19,45 @@ import { UpsertClubAliasDto } from './dto/upsert-club-alias.dto';
 import { UpsertPlayerAliasDto } from './dto/upsert-player-alias.dto';
 import { UpsertCompetitionAliasDto } from './dto/upsert-competition-alias.dto';
 
+// ── CSV helpers ───────────────────────────────────────────────────────────────
+
+export interface ImportError { row: number; id: number | string; error: string }
+export interface ImportSummary { processed: number; skipped: number; errors: ImportError[] }
+
+function parseCsvRows(content: string): Record<string, string>[] {
+  const lines = content.split(/\r?\n/).filter((l) => l.trim());
+  if (lines.length < 2) return [];
+  const headers = splitCsvRow(lines[0]);
+  return lines.slice(1).map((line) => {
+    const values = splitCsvRow(line);
+    const row: Record<string, string> = {};
+    headers.forEach((h, i) => { row[h.trim()] = (values[i] ?? '').trim(); });
+    return row;
+  });
+}
+
+function splitCsvRow(line: string): string[] {
+  const result: string[] = [];
+  let cur = '';
+  let inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQ && line[i + 1] === '"') { cur += '"'; i++; }
+      else { inQ = !inQ; }
+    } else if (ch === ',' && !inQ) {
+      result.push(cur);
+      cur = '';
+    } else {
+      cur += ch;
+    }
+  }
+  result.push(cur);
+  return result;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 @Injectable()
 export class AdminService {
   constructor(
@@ -32,40 +71,94 @@ export class AdminService {
     @InjectQueue(QUEUE_PLAYER_PRICE_UPDATE) private readonly priceUpdateQueue: Queue,
   ) {}
 
+  // ── Alias summary ─────────────────────────────────────────────────────────
+
   getAliasesSummary() {
     return this.aliasService.getUnaliasedSummary();
   }
 
-  async getUnaliasedClubs(page: number, limit: number) {
+  // ── Club list ─────────────────────────────────────────────────────────────
+
+  async getClubs(page: number, limit: number, search: string, filter: 'all' | 'unaliased' | 'aliased') {
     const skip = (page - 1) * limit;
+
+    const aliasFilter =
+      filter === 'unaliased' ? { alias: null } :
+      filter === 'aliased'   ? { NOT: { alias: null } } :
+      {};
+
+    const searchFilter = search
+      ? { OR: [
+          { realName: { contains: search, mode: 'insensitive' as const } },
+          { alias: { name: { contains: search, mode: 'insensitive' as const } } },
+        ]}
+      : {};
+
+    const where = { AND: [aliasFilter, searchFilter].filter(f => Object.keys(f).length > 0) };
+
     const [items, total] = await Promise.all([
-      this.prisma.club.findMany({ where: { alias: null }, skip, take: limit, include: { alias: true } }),
-      this.prisma.club.count({ where: { alias: null } }),
+      this.prisma.club.findMany({ where, skip, take: limit, include: { alias: true }, orderBy: { id: 'asc' } }),
+      this.prisma.club.count({ where }),
     ]);
-    return { items: items.map((c) => this.aliasService.resolveClub(c)), total, page, limit };
+    return { items: items.map((c) => this.aliasService.resolveClubForAdmin(c)), total, page, limit };
   }
 
-  async getUnaliasedPlayers(page: number, limit: number) {
+  async getUnaliasedClubs(page: number, limit: number) {
+    return this.getClubs(page, limit, '', 'unaliased');
+  }
+
+  // ── Player list ───────────────────────────────────────────────────────────
+
+  async getPlayers(page: number, limit: number, search: string, filter: 'all' | 'unaliased' | 'aliased') {
     const skip = (page - 1) * limit;
+
+    const aliasFilter =
+      filter === 'unaliased' ? { alias: null } :
+      filter === 'aliased'   ? { NOT: { alias: null } } :
+      {};
+
+    const searchFilter = search
+      ? { OR: [
+          { realName: { contains: search, mode: 'insensitive' as const } },
+          { alias: { name: { contains: search, mode: 'insensitive' as const } } },
+        ]}
+      : {};
+
+    const where = { AND: [aliasFilter, searchFilter].filter(f => Object.keys(f).length > 0) };
+
     const [items, total] = await Promise.all([
       this.prisma.player.findMany({
-        where: { alias: null },
+        where,
         skip,
         take: limit,
         include: { alias: true, club: { include: { alias: true } } },
+        orderBy: { id: 'asc' },
       }),
-      this.prisma.player.count({ where: { alias: null } }),
+      this.prisma.player.count({ where }),
     ]);
-    return { items: items.map((p) => this.aliasService.resolvePlayer(p)), total, page, limit };
+    return { items: items.map((p) => this.aliasService.resolvePlayerForAdmin(p)), total, page, limit };
+  }
+
+  async getUnaliasedPlayers(page: number, limit: number) {
+    return this.getPlayers(page, limit, '', 'unaliased');
+  }
+
+  // ── Competition list ──────────────────────────────────────────────────────
+
+  async getCompetitions(filter: 'all' | 'unaliased' | 'aliased') {
+    const where =
+      filter === 'unaliased' ? { alias: null } :
+      filter === 'aliased'   ? { NOT: { alias: null } } :
+      {};
+    const items = await this.prisma.competition.findMany({ where, include: { alias: true } });
+    return items.map((c) => this.aliasService.resolveCompetitionForAdmin(c));
   }
 
   async getUnaliasedCompetitions() {
-    const items = await this.prisma.competition.findMany({
-      where: { alias: null },
-      include: { alias: true },
-    });
-    return items.map((c) => this.aliasService.resolveCompetition(c));
+    return this.getCompetitions('unaliased');
   }
+
+  // ── Upsert / Delete aliases ───────────────────────────────────────────────
 
   async upsertClubAlias(clubId: number, dto: UpsertClubAliasDto) {
     const club = await this.prisma.club.findUnique({ where: { id: clubId } });
@@ -132,6 +225,74 @@ export class AdminService {
       throw err;
     }
   }
+
+  // ── Import ────────────────────────────────────────────────────────────────
+
+  async importAliases(files: {
+    clubs?: Express.Multer.File[];
+    players?: Express.Multer.File[];
+  }): Promise<{ clubs?: ImportSummary; players?: ImportSummary }> {
+    const result: { clubs?: ImportSummary; players?: ImportSummary } = {};
+    if (files.clubs?.[0]) result.clubs = await this.importClubsCsv(files.clubs[0].buffer.toString('utf-8'));
+    if (files.players?.[0]) result.players = await this.importPlayersCsv(files.players[0].buffer.toString('utf-8'));
+    return result;
+  }
+
+  private async importClubsCsv(content: string): Promise<ImportSummary> {
+    const rows = parseCsvRows(content);
+    let processed = 0, skipped = 0;
+    const errors: ImportError[] = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const rowNum = i + 2;
+      if (!row.alias_name?.trim()) { skipped++; continue; }
+
+      const id = parseInt(row.id, 10);
+      if (isNaN(id)) { errors.push({ row: rowNum, id: row.id, error: 'Invalid ID' }); continue; }
+
+      const club = await this.prisma.club.findUnique({ where: { id } });
+      if (!club) { errors.push({ row: rowNum, id, error: `Club ${id} not found` }); continue; }
+
+      await this.prisma.clubAlias.upsert({
+        where: { clubId: id },
+        create: { clubId: id, name: row.alias_name.trim(), shortName: row.alias_short_name?.trim() || null, city: row.alias_city?.trim() || null },
+        update: { name: row.alias_name.trim(), shortName: row.alias_short_name?.trim() || null, city: row.alias_city?.trim() || null },
+      });
+      processed++;
+    }
+
+    return { processed, skipped, errors };
+  }
+
+  private async importPlayersCsv(content: string): Promise<ImportSummary> {
+    const rows = parseCsvRows(content);
+    let processed = 0, skipped = 0;
+    const errors: ImportError[] = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const rowNum = i + 2;
+      if (!row.alias_name?.trim()) { skipped++; continue; }
+
+      const id = parseInt(row.id, 10);
+      if (isNaN(id)) { errors.push({ row: rowNum, id: row.id, error: 'Invalid ID' }); continue; }
+
+      const player = await this.prisma.player.findUnique({ where: { id } });
+      if (!player) { errors.push({ row: rowNum, id, error: `Player ${id} not found` }); continue; }
+
+      await this.prisma.playerAlias.upsert({
+        where: { playerId: id },
+        create: { playerId: id, name: row.alias_name.trim() },
+        update: { name: row.alias_name.trim() },
+      });
+      processed++;
+    }
+
+    return { processed, skipped, errors };
+  }
+
+  // ── Sync triggers ─────────────────────────────────────────────────────────
 
   async triggerBootstrap(season?: number, force?: boolean) {
     const job = await this.bootstrapQueue.add(JOB_BOOTSTRAP, { season, force }, { removeOnComplete: 10, removeOnFail: 50 });

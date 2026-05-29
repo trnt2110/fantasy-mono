@@ -11,7 +11,10 @@ import {
   HttpCode,
   HttpStatus,
   Query,
+  UseInterceptors,
+  UploadedFiles,
 } from '@nestjs/common';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Role } from '@prisma/client';
 import { AdminService } from './admin.service';
@@ -33,33 +36,36 @@ export class AdminController {
   }
 
   @Get('aliases/clubs')
-  getUnaliasedClubs(
+  getClubs(
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
+    @Query('search', new DefaultValuePipe('')) search: string,
+    @Query('filter', new DefaultValuePipe('all')) filter: 'all' | 'unaliased' | 'aliased',
   ) {
-    return this.adminService.getUnaliasedClubs(page, limit);
+    return this.adminService.getClubs(page, limit, search, filter);
   }
 
   @Get('aliases/players')
-  getUnaliasedPlayers(
+  getPlayers(
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
+    @Query('search', new DefaultValuePipe('')) search: string,
+    @Query('filter', new DefaultValuePipe('all')) filter: 'all' | 'unaliased' | 'aliased',
   ) {
-    return this.adminService.getUnaliasedPlayers(page, limit);
+    return this.adminService.getPlayers(page, limit, search, filter);
   }
 
   @Get('aliases/competitions')
-  getUnaliasedCompetitions() {
-    return this.adminService.getUnaliasedCompetitions();
+  getCompetitions(
+    @Query('filter', new DefaultValuePipe('all')) filter: 'all' | 'unaliased' | 'aliased',
+  ) {
+    return this.adminService.getCompetitions(filter);
   }
 
   // ─── Club aliases ─────────────────────────────────────────────────────────
 
   @Put('aliases/clubs/:id')
-  upsertClubAlias(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpsertClubAliasDto,
-  ) {
+  upsertClubAlias(@Param('id', ParseIntPipe) id: number, @Body() dto: UpsertClubAliasDto) {
     return this.adminService.upsertClubAlias(id, dto);
   }
 
@@ -72,10 +78,7 @@ export class AdminController {
   // ─── Player aliases ───────────────────────────────────────────────────────
 
   @Put('aliases/players/:id')
-  upsertPlayerAlias(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpsertPlayerAliasDto,
-  ) {
+  upsertPlayerAlias(@Param('id', ParseIntPipe) id: number, @Body() dto: UpsertPlayerAliasDto) {
     return this.adminService.upsertPlayerAlias(id, dto);
   }
 
@@ -88,10 +91,7 @@ export class AdminController {
   // ─── Competition aliases ──────────────────────────────────────────────────
 
   @Put('aliases/competitions/:id')
-  upsertCompetitionAlias(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpsertCompetitionAliasDto,
-  ) {
+  upsertCompetitionAlias(@Param('id', ParseIntPipe) id: number, @Body() dto: UpsertCompetitionAliasDto) {
     return this.adminService.upsertCompetitionAlias(id, dto);
   }
 
@@ -101,6 +101,19 @@ export class AdminController {
     return this.adminService.deleteCompetitionAlias(id);
   }
 
+  // ─── Bulk import ──────────────────────────────────────────────────────────
+
+  @Post('import/aliases')
+  @UseInterceptors(FileFieldsInterceptor([
+    { name: 'clubs', maxCount: 1 },
+    { name: 'players', maxCount: 1 },
+  ]))
+  importAliases(
+    @UploadedFiles() files: { clubs?: Express.Multer.File[]; players?: Express.Multer.File[] },
+  ) {
+    return this.adminService.importAliases(files ?? {});
+  }
+
   // ─── Sync triggers ────────────────────────────────────────────────────────
 
   @Post('sync/bootstrap')
@@ -108,7 +121,6 @@ export class AdminController {
   triggerBootstrap(@Body() dto: BootstrapDto) {
     return this.adminService.triggerBootstrap(dto.season, dto.force);
   }
-
 
   @Post('sync/players/:leagueId')
   @HttpCode(HttpStatus.ACCEPTED)
