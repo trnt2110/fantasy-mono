@@ -24,6 +24,13 @@ import { UpsertCompetitionAliasDto } from './dto/upsert-competition-alias.dto';
 export interface ImportError { row: number; id: number | string; error: string }
 export interface ImportSummary { processed: number; skipped: number; errors: ImportError[] }
 
+interface MulterFile {
+  buffer: Buffer;
+  originalname: string;
+  size: number;
+  mimetype: string;
+}
+
 function parseCsvRows(content: string): Record<string, string>[] {
   const lines = content.split(/\r?\n/).filter((l) => l.trim());
   if (lines.length < 2) return [];
@@ -229,8 +236,8 @@ export class AdminService {
   // ── Import ────────────────────────────────────────────────────────────────
 
   async importAliases(files: {
-    clubs?: Express.Multer.File[];
-    players?: Express.Multer.File[];
+    clubs?: MulterFile[];
+    players?: MulterFile[];
   }): Promise<{ clubs?: ImportSummary; players?: ImportSummary }> {
     const result: { clubs?: ImportSummary; players?: ImportSummary } = {};
     if (files.clubs?.[0]) result.clubs = await this.importClubsCsv(files.clubs[0].buffer.toString('utf-8'));
@@ -243,17 +250,25 @@ export class AdminService {
     let processed = 0, skipped = 0;
     const errors: ImportError[] = [];
 
+    // Pre-validate IDs and filter to rows that have an alias_name
+    const toProcess: Array<{ row: Record<string, string>; rowNum: number; id: number }> = [];
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       const rowNum = i + 2;
       if (!row.alias_name?.trim()) { skipped++; continue; }
-
       const id = parseInt(row.id, 10);
       if (isNaN(id)) { errors.push({ row: rowNum, id: row.id, error: 'Invalid ID' }); continue; }
+      toProcess.push({ row, rowNum, id });
+    }
 
-      const club = await this.prisma.club.findUnique({ where: { id } });
-      if (!club) { errors.push({ row: rowNum, id, error: `Club ${id} not found` }); continue; }
+    // Batch existence check
+    const validIds = new Set(
+      (await this.prisma.club.findMany({ where: { id: { in: toProcess.map(r => r.id) } }, select: { id: true } }))
+        .map(c => c.id),
+    );
 
+    for (const { row, rowNum, id } of toProcess) {
+      if (!validIds.has(id)) { errors.push({ row: rowNum, id, error: `Club ${id} not found` }); continue; }
       await this.prisma.clubAlias.upsert({
         where: { clubId: id },
         create: { clubId: id, name: row.alias_name.trim(), shortName: row.alias_short_name?.trim() || null, city: row.alias_city?.trim() || null },
@@ -270,17 +285,23 @@ export class AdminService {
     let processed = 0, skipped = 0;
     const errors: ImportError[] = [];
 
+    const toProcess: Array<{ row: Record<string, string>; rowNum: number; id: number }> = [];
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       const rowNum = i + 2;
       if (!row.alias_name?.trim()) { skipped++; continue; }
-
       const id = parseInt(row.id, 10);
       if (isNaN(id)) { errors.push({ row: rowNum, id: row.id, error: 'Invalid ID' }); continue; }
+      toProcess.push({ row, rowNum, id });
+    }
 
-      const player = await this.prisma.player.findUnique({ where: { id } });
-      if (!player) { errors.push({ row: rowNum, id, error: `Player ${id} not found` }); continue; }
+    const validIds = new Set(
+      (await this.prisma.player.findMany({ where: { id: { in: toProcess.map(r => r.id) } }, select: { id: true } }))
+        .map(p => p.id),
+    );
 
+    for (const { row, rowNum, id } of toProcess) {
+      if (!validIds.has(id)) { errors.push({ row: rowNum, id, error: `Player ${id} not found` }); continue; }
       await this.prisma.playerAlias.upsert({
         where: { playerId: id },
         create: { playerId: id, name: row.alias_name.trim() },

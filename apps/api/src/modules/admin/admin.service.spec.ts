@@ -1,10 +1,11 @@
+/// <reference types="jest" />
 import { AdminService } from './admin.service';
 
 // Minimal mock — only the methods we need
 function makeService(overrides: Partial<any> = {}): AdminService {
   const prisma = {
-    club: { findMany: jest.fn(), count: jest.fn(), findUnique: jest.fn() },
-    player: { findMany: jest.fn(), count: jest.fn(), findUnique: jest.fn() },
+    club: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn() },
+    player: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn() },
     clubAlias: { upsert: jest.fn() },
     playerAlias: { upsert: jest.fn() },
     ...overrides.prisma,
@@ -36,8 +37,8 @@ describe('AdminService.importAliases', () => {
 
   it('processes rows with alias_name, upserts alias', async () => {
     const upsert = jest.fn().mockResolvedValue({});
-    const findUnique = jest.fn().mockResolvedValue({ id: 1 });
-    const svc = makeService({ prisma: { club: { findUnique }, clubAlias: { upsert } } });
+    const findMany = jest.fn().mockResolvedValue([{ id: 1 }]);
+    const svc = makeService({ prisma: { club: { findMany }, clubAlias: { upsert } } });
     const csv = 'id,real_name,competition_id,alias_name,alias_short_name,alias_city\n1,Real Club,39,Alias Club,ACL,London';
     const file = { buffer: Buffer.from(csv) } as any;
     const result = await svc.importAliases({ clubs: [file] });
@@ -49,8 +50,8 @@ describe('AdminService.importAliases', () => {
   });
 
   it('records error for unknown club id', async () => {
-    const findUnique = jest.fn().mockResolvedValue(null);
-    const svc = makeService({ prisma: { club: { findUnique } } });
+    const findMany = jest.fn().mockResolvedValue([]); // empty = not found
+    const svc = makeService({ prisma: { club: { findMany } } });
     const csv = 'id,real_name,competition_id,alias_name,alias_short_name,alias_city\n999,Ghost Club,39,Ghost,GHO,';
     const file = { buffer: Buffer.from(csv) } as any;
     const result = await svc.importAliases({ clubs: [file] });
@@ -60,8 +61,8 @@ describe('AdminService.importAliases', () => {
 
   it('processes player CSV with alias_name', async () => {
     const upsert = jest.fn().mockResolvedValue({});
-    const findUnique = jest.fn().mockResolvedValue({ id: 5 });
-    const svc = makeService({ prisma: { player: { findUnique }, playerAlias: { upsert } } });
+    const findMany = jest.fn().mockResolvedValue([{ id: 5 }]);
+    const svc = makeService({ prisma: { player: { findMany }, playerAlias: { upsert } } });
     const csv = 'id,real_name,position,club_id,club_real_name,alias_name\n5,Real Player,MF,1,Real Club,Alias Player';
     const file = { buffer: Buffer.from(csv) } as any;
     const result = await svc.importAliases({ players: [file] });

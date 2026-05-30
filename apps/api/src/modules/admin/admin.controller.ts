@@ -17,11 +17,13 @@ import {
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Role } from '@prisma/client';
-import { AdminService } from './admin.service';
+import { AdminService, ImportSummary } from './admin.service';
 import { UpsertClubAliasDto } from './dto/upsert-club-alias.dto';
 import { UpsertPlayerAliasDto } from './dto/upsert-player-alias.dto';
 import { UpsertCompetitionAliasDto } from './dto/upsert-competition-alias.dto';
 import { BootstrapDto } from './dto/bootstrap.dto';
+
+interface MulterFile { buffer: Buffer; originalname: string; size: number; mimetype: string }
 
 @Controller('admin')
 @Roles(Role.ADMIN)
@@ -104,13 +106,13 @@ export class AdminController {
   // ─── Bulk import ──────────────────────────────────────────────────────────
 
   @Post('import/aliases')
-  @UseInterceptors(FileFieldsInterceptor([
-    { name: 'clubs', maxCount: 1 },
-    { name: 'players', maxCount: 1 },
-  ]))
+  @UseInterceptors(FileFieldsInterceptor(
+    [{ name: 'clubs', maxCount: 1 }, { name: 'players', maxCount: 1 }],
+    { limits: { fileSize: 5 * 1024 * 1024 } },
+  ))
   importAliases(
-    @UploadedFiles() files: { clubs?: Express.Multer.File[]; players?: Express.Multer.File[] },
-  ) {
+    @UploadedFiles() files: { clubs?: MulterFile[]; players?: MulterFile[] },
+  ): Promise<{ clubs?: ImportSummary; players?: ImportSummary }> {
     return this.adminService.importAliases(files ?? {});
   }
 
