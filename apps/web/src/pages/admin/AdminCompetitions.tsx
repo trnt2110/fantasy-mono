@@ -6,8 +6,14 @@ type Filter = 'all' | 'unaliased' | 'aliased'
 
 export function AdminCompetitions() {
   const [filter, setFilter] = useState<Filter>('all')
+  const [toast, setToast] = useState<string | null>(null)
   const { data, isLoading } = useAdminCompetitions(filter)
   const updateAlias = useUpdateCompetitionAlias()
+
+  function showToast(msg: string) {
+    setToast(msg)
+    setTimeout(() => setToast(null), 4000)
+  }
 
   return (
     <div className="space-y-4">
@@ -56,7 +62,7 @@ export function AdminCompetitions() {
                   <EditableCell
                     value={comp.shortName ?? ''}
                     onSave={v => {
-                      if (!comp.isAliased) return
+                      if (!comp.isAliased) { showToast('Set an alias name first'); return }
                       updateAlias.mutate({ id: comp.id, name: comp.name, shortName: v })
                     }}
                     placeholder="—"
@@ -72,6 +78,12 @@ export function AdminCompetitions() {
           </tbody>
         </table>
       </div>
+
+      {toast && (
+        <div className="fixed bottom-6 right-6 bg-game-card border border-white/10 rounded-xl px-4 py-3 text-sm text-white shadow-lg z-50 max-w-sm">
+          {toast}
+        </div>
+      )}
     </div>
   )
 }

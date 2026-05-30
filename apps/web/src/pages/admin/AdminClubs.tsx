@@ -25,7 +25,7 @@ export function AdminClubs() {
 
   function handleSave(club: AdminClub, field: 'name' | 'shortName' | 'city', value: string) {
     const name = field === 'name' ? value : (club.isAliased ? club.name : '')
-    if (!name.trim()) return
+    if (!name.trim()) { showToast('Set an alias name first'); return }
     updateAlias.mutate({
       id: club.id,
       name,

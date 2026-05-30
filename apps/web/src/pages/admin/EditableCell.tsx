@@ -11,16 +11,21 @@ export function EditableCell({ value, onSave, placeholder = '—', className = '
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(value)
   const inputRef = useRef<HTMLInputElement>(null)
+  const doneRef = useRef(false) // prevents blur from re-firing after Enter/Escape
 
-  useEffect(() => { if (editing) inputRef.current?.focus() }, [editing])
+  useEffect(() => { if (editing) { doneRef.current = false; inputRef.current?.focus() } }, [editing])
   useEffect(() => { setDraft(value) }, [value])
 
   function commit() {
+    if (doneRef.current) return
+    doneRef.current = true
     setEditing(false)
     if (draft.trim() !== value) onSave(draft.trim())
   }
 
   function cancel() {
+    if (doneRef.current) return
+    doneRef.current = true
     setDraft(value)
     setEditing(false)
   }
