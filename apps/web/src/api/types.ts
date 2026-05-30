@@ -79,3 +79,21 @@ export interface ApiFantasyLeague {
 export interface ApiLeagueStanding extends ApiLeaderboardEntry {
   joinedAt: string
 }
+
+// Admin — alias management
+export interface AdminClub {
+  id: number; realName: string; name: string; shortName?: string; city?: string
+  competitionId: number; isAliased: boolean
+}
+export interface AdminPlayer {
+  id: number; realName: string; name: string; position: string
+  clubId: number; clubRealName?: string; isAliased: boolean
+}
+export interface AdminCompetition {
+  id: number; realName: string; name: string; shortName?: string
+  country: string; isAliased: boolean
+}
+export interface AdminListResponse<T> { items: T[]; total: number; page: number; limit: number }
+export interface ImportError { row: number; id: number | string; error: string }
+export interface ImportSummary { processed: number; skipped: number; errors: ImportError[] }
+export interface ImportResult { clubs?: ImportSummary; players?: ImportSummary }
