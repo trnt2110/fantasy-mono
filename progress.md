@@ -271,6 +271,78 @@ Do one league per day on the free plan.
 
 ---
 
+## Phase 7 — End-to-End Testing & Bug Fixes 🔄
+
+**Started:** 2026-06-01
+
+### Onboarding page fixes ✅ (2026-06-01)
+
+**Bug 1: Footer (Next button + budget) not visible on /onboarding step 1**
+- Root cause: `OnboardingWizard` used `min-h-screen flex flex-col`. With `min-height` (not a definite `height`), the `flex-1 overflow-hidden` content area failed to anchor `Step1PickPlayers`'s `h-full`. The player list expanded to full content height; the `overflow-hidden` parent clipped everything past the viewport — exactly where the footer lives. Both the "Next →" button and the budget display were off-screen.
+- Fix: Changed `min-h-screen` → `h-dvh overflow-hidden` in `Onboarding.tsx`. `h-dvh` gives a definite viewport height (accounts for mobile browser chrome), making `h-full` resolve correctly in child components.
+
+**Bug 2: Max-price filter slider confused for remaining budget indicator**
+- Root cause: The max-price filter slider was styled with the same gold `£15m` label as the budget display, making it look like a budget tracker to users.
+- Fix: Relabeled filter with a grey "Max" prefix; changed slider accent to neon green. Footer budget label changed from "Budget" to "Remaining Budget"; removed `Math.max(0, ...)` floor so negative budget renders in red as an explicit overspend signal.
+
+### Gameplay Simulation system ✅ (2026-06-02)
+
+**Context:** All 2024 GW deadlines are in the past, so the normal pick/transfer flow is permanently blocked for testing. A simulation system was built as admin-only tooling to drive the full game loop without real match data.
+
+**What was built:**
+
+Backend (`apps/api/src/modules/admin/`):
+- `simulation.service.ts` — `createBots`, `openGameweek`, `submitBotPicks`, `finalizeGameweek`, `generatePerformance`, `getStatus`
+- `simulation.controller.ts` — 5 endpoints under `/admin/simulate/`
+- `dto/simulate.dto.ts` — `CreateBotsDto`, `OpenGameweekDto`
+- 11 unit tests (all passing)
+
+Frontend (`apps/web/src/pages/admin/AdminSimulation.tsx`):
+- Bot setup card (create/reset bots with count input)
+- Current-GW stepper with 4 steps: Open → Your Picks → Bot Picks → Finalize
+- Action buttons per step, inline error messages, 4-second toast notifications
+- GW history table (all finished GWs with teams scored + deadline)
+- `useAdminSimulation.ts` — 5 TanStack Query hooks; status query invalidated after every mutation
+- Simulation tab added to `AdminPage.tsx`
+
+**Key design decisions:**
+- Simulation bypasses `GameweekOpenGuard` entirely — all DB writes are direct via `SimulationService`
+- `finalizeGameweek` replicates `GameweekFinaliseProcessor` logic synchronously (no BullMQ)
+- Bot users identified by `@sim.test` email suffix; `createBots` is idempotent
+- `generatePerformance`: 92% play rate, position-weighted goal rates, GK gets saves
+- `submitBotPicks`: uses two-step GW lookup to avoid cross-GW pick bleed on second+ GW
+- `PlayerPerformance` upsert uses `findFirst` + conditional create/update (schema `@@unique([playerId, fixtureId])` is nullable, cannot use Prisma upsert)
+- Competition hardcoded to 39 (PL) for MVP — selector deferred
+
+**Bugs found and fixed during implementation:**
+- `Number(prismaDecimal)` → NaN; fixed to `.toNumber()`
+- Budget test was asserting raw mock data instead of the mapped `p.price` field
+- `submitBotPicks` used `gameweekId: { not: gwId }` which blended picks from multiple prior GWs; fixed to fetch most-recent-GW picks only
+
+See `docs/admin_guide.md` for the full simulation workflow.
+
+### Squad page shows empty pitch and list after team creation ✅ (2026-06-02)
+
+**Root cause: Systematic missing `{ data: ... }` wrapper across 6 API controllers**
+
+The auth controller (the correct template) wraps all responses: `return { data: await service.method() }`. Every frontend hook reads results as `res.data.data` (outer `.data` = axios envelope, inner `.data` = API wrapper). Six controllers were missing this wrapper, so every hook got `undefined` instead of actual data.
+
+The cascade on `/squad`:
+1. `GET /fantasy-teams/mine` returned unwrapped team → `res.data.data = undefined` → `fantasyTeamId` never set in auth store
+2. `GET /gameweeks/current` returned unwrapped gameweek → `res.data.data = undefined` → `gw = undefined` → "GW—" in header
+3. `useGwPicks(gw?.id)` disabled (no `gameweekId`, no `fantasyTeamId`) → `picks = []` → empty pitch and list
+
+**Fixes:**
+- `gameweeks.controller.ts` — wrapped `findCurrent`
+- `picks.controller.ts` — wrapped `getPicks`
+- `fantasy-teams.controller.ts` — wrapped `findMine`, `findOne`, `findScores`
+- `clubs.controller.ts` — wrapped `findAll`
+- `fixtures.controller.ts` — wrapped both `findByGameweek` and `findUpcomingByClub`
+- `fantasy-leagues.controller.ts` — wrapped all four endpoints
+- `fantasy-teams.service.ts findMine` — additionally fixed to serialize Prisma `Decimal` fields as `Number` (same pattern as `findOne`), preventing `budget` from serializing as a string over JSON
+
+---
+
 ## Blocking Issues
 
 None currently.
