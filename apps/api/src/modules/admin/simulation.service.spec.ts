@@ -79,3 +79,41 @@ describe('SimulationService.buildRandomSquad', () => {
     expect(total).toBeLessThanOrEqual(100);
   });
 });
+
+describe('SimulationService.openGameweek', () => {
+  let service: SimulationService;
+  let prisma: any;
+
+  beforeEach(async () => {
+    prisma = {
+      player: { findMany: jest.fn() },
+      competition: { findUnique: jest.fn() },
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        SimulationService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: RedisService, useValue: {} },
+        { provide: ScoringService, useValue: {} },
+      ],
+    }).compile();
+
+    service = module.get(SimulationService);
+  });
+
+  it('sets deadlineTime to the future', async () => {
+    const futureDate = new Date(Date.now() + 60 * 60_000);
+    (prisma as any).gameweek = {
+      findUnique: jest.fn().mockResolvedValue({ id: 1, competitionId: 39 }),
+      update: jest.fn().mockResolvedValue({ id: 1, deadlineTime: futureDate }),
+    };
+
+    const result = await service.openGameweek(1, 60);
+
+    expect(prisma.gameweek.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 1 } }),
+    );
+    expect(result.deadlineTime.getTime()).toBeGreaterThan(Date.now());
+  });
+});

@@ -186,7 +186,14 @@ export class SimulationService {
   }
 
   async openGameweek(gwId: number, minutesFromNow: number): Promise<{ gameweekId: number; deadlineTime: Date }> {
-    throw new Error('Not implemented');
+    const gw = await this.prisma.gameweek.findUnique({ where: { id: gwId } });
+    if (!gw) throw new NotFoundException(`Gameweek ${gwId} not found`);
+
+    const deadlineTime = new Date(Date.now() + minutesFromNow * 60_000);
+    await this.prisma.gameweek.update({ where: { id: gwId }, data: { deadlineTime } });
+
+    this.logger.log(`GW ${gwId} opened — deadline set to ${deadlineTime.toISOString()}`);
+    return { gameweekId: gwId, deadlineTime };
   }
 
   async submitBotPicks(gwId: number): Promise<{ bots: number; picksSeeded: number }> {
