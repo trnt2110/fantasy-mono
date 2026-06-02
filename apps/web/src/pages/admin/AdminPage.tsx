@@ -5,13 +5,15 @@ import { useLogout } from '../../api/hooks'
 import { AdminClubs } from './AdminClubs'
 import { AdminPlayers } from './AdminPlayers'
 import { AdminCompetitions } from './AdminCompetitions'
+import { AdminSimulation } from './AdminSimulation'
 
-type Tab = 'clubs' | 'players' | 'competitions'
+type Tab = 'clubs' | 'players' | 'competitions' | 'simulation'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'clubs', label: 'Clubs' },
   { id: 'players', label: 'Players' },
   { id: 'competitions', label: 'Competitions' },
+  { id: 'simulation', label: 'Simulation' },
 ]
 
 export function AdminPage() {
@@ -60,6 +62,7 @@ export function AdminPage() {
         {tab === 'clubs'        && <AdminClubs />}
         {tab === 'players'      && <AdminPlayers />}
         {tab === 'competitions' && <AdminCompetitions />}
+        {tab === 'simulation'   && <AdminSimulation />}
       </div>
     </div>
   )
