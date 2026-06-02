@@ -38,7 +38,7 @@ export class SimulationService {
 
     const available = allPlayers
       .filter((p) => p.competitionPrices.length > 0)
-      .map((p) => ({ ...p, price: Number(p.competitionPrices[0].currentPrice) }));
+      .map((p) => ({ ...p, price: p.competitionPrices[0].currentPrice.toNumber() }));
 
     const byPos: Record<string, typeof available> = {
       GK: this.shuffle(available.filter((p) => p.position === 'GK')),
