@@ -75,7 +75,7 @@ describe('SimulationService.buildRandomSquad', () => {
 
     const squad = await (service as any).buildRandomSquad(39);
 
-    const total = squad.players.reduce((sum: number, p: any) => sum + p.competitionPrices[0].currentPrice.toNumber(), 0);
+    const total = squad.players.reduce((sum: number, p: any) => sum + p.price, 0);
     expect(total).toBeLessThanOrEqual(100);
   });
 });
