@@ -347,4 +347,30 @@ export class SimulationService {
     this.logger.log(`GW ${gwId} finalized — ${scored} teams scored. Next GW: ${nextGw?.id ?? 'none'}`);
     return { gameweekId: gwId, teamsScored: scored, nextGameweekId: nextGw?.id ?? null };
   }
+
+  async getStatus(competitionId: number) {
+    const botCount = await this.prisma.user.count({
+      where: { email: { contains: '@sim.test' } },
+    });
+
+    const currentGameweek = await this.prisma.gameweek.findFirst({
+      where: { competitionId, isCurrent: true },
+      select: { id: true, number: true, status: true, deadlineTime: true },
+    });
+
+    const finishedGws = await this.prisma.gameweek.findMany({
+      where: { competitionId, status: 'FINISHED' },
+      orderBy: { number: 'desc' },
+      select: { id: true, number: true, deadlineTime: true },
+    });
+
+    const finishedGameweeks = await Promise.all(
+      finishedGws.map(async (gw) => ({
+        ...gw,
+        teamsScored: await this.prisma.gameweekScore.count({ where: { gameweekId: gw.id } }),
+      })),
+    );
+
+    return { botCount, competitionId, currentGameweek: currentGameweek ?? null, finishedGameweeks };
+  }
 }

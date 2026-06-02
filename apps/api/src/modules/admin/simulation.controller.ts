@@ -1,4 +1,4 @@
-import { Controller, Post, Param, ParseIntPipe, Body, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Get, Param, ParseIntPipe, Body, HttpCode, HttpStatus } from '@nestjs/common';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Role } from '@prisma/client';
 import { SimulationService } from './simulation.service';
@@ -8,6 +8,11 @@ import { CreateBotsDto, OpenGameweekDto } from './dto/simulate.dto';
 @Roles(Role.ADMIN)
 export class SimulationController {
   constructor(private readonly simulation: SimulationService) {}
+
+  @Get('status')
+  async getStatus() {
+    return { data: await this.simulation.getStatus(39) };
+  }
 
   @Post('bots')
   async createBots(@Body() dto: CreateBotsDto) {
