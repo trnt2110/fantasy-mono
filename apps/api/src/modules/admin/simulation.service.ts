@@ -254,7 +254,97 @@ export class SimulationService {
     return { bots: botTeams.length, picksSeeded };
   }
 
+  private generatePerformance(position: string): {
+    minutesPlayed: number; goalsScored: number; assists: number;
+    cleanSheet: boolean; goalsConceded: number; ownGoals: number;
+    penaltiesSaved: number; penaltiesMissed: number;
+    yellowCards: number; redCards: number; saves: number; bonus: number;
+  } {
+    const r = Math.random;
+    const played = r() > 0.08;
+    if (!played) {
+      return { minutesPlayed: 0, goalsScored: 0, assists: 0, cleanSheet: false,
+        goalsConceded: 0, ownGoals: 0, penaltiesSaved: 0, penaltiesMissed: 0,
+        yellowCards: 0, redCards: 0, saves: 0, bonus: 0 };
+    }
+    const minutesPlayed = r() > 0.25 ? Math.floor(60 + r() * 30) : Math.floor(1 + r() * 59);
+    const goalRates: Record<string, number> = { GK: 0.01, DEF: 0.04, MID: 0.12, FWD: 0.28 };
+    const cleanSheet = minutesPlayed >= 60 && r() < 0.28;
+    return {
+      minutesPlayed,
+      goalsScored: r() < (goalRates[position] ?? 0.1) ? (r() < 0.15 ? 2 : 1) : 0,
+      assists: r() < 0.12 ? 1 : 0,
+      cleanSheet,
+      goalsConceded: cleanSheet ? 0 : Math.floor(r() * 3),
+      ownGoals: r() < 0.01 ? 1 : 0,
+      penaltiesSaved: position === 'GK' && r() < 0.02 ? 1 : 0,
+      penaltiesMissed: r() < 0.01 ? 1 : 0,
+      yellowCards: r() < 0.08 ? 1 : 0,
+      redCards: r() < 0.01 ? 1 : 0,
+      saves: position === 'GK' ? Math.floor(r() * 7) : 0,
+      bonus: [0, 0, 0, 0, 1, 2, 3][Math.floor(r() * 7)],
+    };
+  }
+
   async finalizeGameweek(gwId: number): Promise<{ gameweekId: number; teamsScored: number; nextGameweekId: number | null }> {
-    throw new Error('Not implemented');
+    const gw = await this.prisma.gameweek.findUnique({
+      where: { id: gwId },
+      include: { competition: true },
+    });
+    if (!gw) throw new NotFoundException(`Gameweek ${gwId} not found`);
+    if (gw.status === 'FINISHED') throw new BadRequestException(`Gameweek ${gwId} is already FINISHED`);
+
+    await this.prisma.gameweek.update({
+      where: { id: gwId },
+      data: { deadlineTime: new Date(Date.now() - 60_000), status: 'SCORING' },
+    });
+
+    const fixtures = await this.prisma.fixture.findMany({ where: { gameweekId: gwId } });
+    const anchorFixtureId = fixtures[0]?.id ?? null;
+
+    const picks = await this.prisma.playerPick.findMany({
+      where: { gameweekId: gwId },
+      include: { player: { select: { position: true } } },
+      distinct: ['playerId'],
+    });
+
+    for (const pick of picks) {
+      const stats = this.generatePerformance(pick.player.position);
+      const { totalPoints, pointsBreakdown } = this.scoring.calculatePlayerPoints(stats, pick.player.position as any);
+
+      const existing = await this.prisma.playerPerformance.findFirst({
+        where: { playerId: pick.playerId, gameweekId: gwId },
+      });
+      if (existing) {
+        await this.prisma.playerPerformance.update({
+          where: { id: existing.id },
+          data: { ...stats, totalPoints, pointsBreakdown, isFinalised: true },
+        });
+      } else {
+        await this.prisma.playerPerformance.create({
+          data: { playerId: pick.playerId, gameweekId: gwId, fixtureId: anchorFixtureId,
+            ...stats, totalPoints, pointsBreakdown, isFinalised: true },
+        });
+      }
+    }
+
+    await this.prisma.fixture.updateMany({ where: { gameweekId: gwId }, data: { status: 'FINISHED' } });
+    await this.scoring.finaliseGameweekScores(gwId);
+    await this.prisma.gameweek.update({ where: { id: gwId }, data: { status: 'FINISHED', isCurrent: false } });
+
+    const nextGw = await this.prisma.gameweek.findFirst({
+      where: { competitionId: gw.competitionId, status: { not: 'FINISHED' } },
+      orderBy: { number: 'asc' },
+    });
+    if (nextGw) {
+      await this.prisma.gameweek.update({ where: { id: nextGw.id }, data: { isCurrent: true } });
+    }
+
+    await this.redis.delByPattern(`leaderboard:global:${gw.competitionId}:*`);
+    await this.redis.delByPattern(`leaderboard:league:*`);
+
+    const scored = await this.prisma.gameweekScore.count({ where: { gameweekId: gwId } });
+    this.logger.log(`GW ${gwId} finalized — ${scored} teams scored. Next GW: ${nextGw?.id ?? 'none'}`);
+    return { gameweekId: gwId, teamsScored: scored, nextGameweekId: nextGw?.id ?? null };
   }
 }

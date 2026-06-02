@@ -190,3 +190,38 @@ describe('SimulationService.submitBotPicks', () => {
     expect(result.picksSeeded).toBe(0);
   });
 });
+
+describe('SimulationService.generatePerformance', () => {
+  let service: SimulationService;
+  let prisma: any;
+
+  beforeEach(async () => {
+    prisma = {
+      player: { findMany: jest.fn() },
+      competition: { findUnique: jest.fn() },
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        SimulationService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: RedisService, useValue: {} },
+        { provide: ScoringService, useValue: {} },
+      ],
+    }).compile();
+
+    service = module.get(SimulationService);
+  });
+
+  it('returns valid performance stats for each position', () => {
+    for (const pos of ['GK', 'DEF', 'MID', 'FWD']) {
+      const perf = (service as any).generatePerformance(pos);
+      expect(perf.minutesPlayed).toBeGreaterThanOrEqual(0);
+      expect(perf.minutesPlayed).toBeLessThanOrEqual(90);
+      expect(perf.goalsScored).toBeGreaterThanOrEqual(0);
+      if (pos !== 'GK') {
+        expect(perf.saves).toBe(0);
+      }
+    }
+  });
+});
