@@ -96,4 +96,32 @@ export interface AdminCompetition {
 export interface AdminListResponse<T> { items: T[]; total: number; page: number; limit: number }
 export interface ImportError { row: number; id: number | string; error: string }
 export interface ImportSummary { processed: number; skipped: number; errors: ImportError[] }
-export interface ImportResult { clubs?: ImportSummary; players?: ImportSummary }
+export interface ImportResult { clubs?: ImportSummary; players?: ImportSummary; competitions?: ImportSummary }
+
+// ─── Simulation ───────────────────────────────────────────────────────────────
+
+export interface SimulationCurrentGw {
+  id: number
+  number: number
+  status: 'SCHEDULED' | 'ACTIVE' | 'SCORING' | 'FINISHED'
+  deadlineTime: string
+}
+
+export interface SimulationFinishedGw {
+  id: number
+  number: number
+  teamsScored: number
+  deadlineTime: string
+}
+
+export interface SimulationStatus {
+  botCount: number
+  competitionId: number
+  currentGameweek: SimulationCurrentGw | null
+  finishedGameweeks: SimulationFinishedGw[]
+}
+
+export interface CreateBotsResult { created: number; skipped: number; botIds: string[] }
+export interface OpenGwResult { gameweekId: number; deadlineTime: string }
+export interface BotPicksResult { bots: number; picksSeeded: number }
+export interface FinalizeGwResult { gameweekId: number; teamsScored: number; nextGameweekId: number | null }
