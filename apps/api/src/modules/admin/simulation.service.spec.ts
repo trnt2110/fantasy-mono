@@ -117,3 +117,69 @@ describe('SimulationService.openGameweek', () => {
     expect(result.deadlineTime.getTime()).toBeGreaterThan(Date.now());
   });
 });
+
+describe('SimulationService.submitBotPicks', () => {
+  let service: SimulationService;
+  let prisma: any;
+
+  beforeEach(async () => {
+    prisma = {
+      player: { findMany: jest.fn() },
+      competition: { findUnique: jest.fn() },
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        SimulationService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: RedisService, useValue: {} },
+        { provide: ScoringService, useValue: {} },
+      ],
+    }).compile();
+
+    service = module.get(SimulationService);
+  });
+
+  it('seeds picks from previous GW when none exist for current GW', async () => {
+    (prisma as any).gameweek = {
+      findUnique: jest.fn().mockResolvedValue({ id: 2, competitionId: 39 }),
+    };
+    (prisma as any).fantasyTeam = {
+      findMany: jest.fn().mockResolvedValue([{ id: 'team-1' }]),
+    };
+    (prisma as any).playerPick = {
+      findMany: jest.fn()
+        .mockResolvedValueOnce([])  // no picks for GW2
+        .mockResolvedValueOnce([    // picks from previous GW
+          { playerId: 1, isCaptain: true, isViceCaptain: false, isStarting: true, benchOrder: null },
+          { playerId: 2, isCaptain: false, isViceCaptain: true, isStarting: true, benchOrder: null },
+        ]),
+      createMany: jest.fn().mockResolvedValue({ count: 2 }),
+    };
+
+    const result = await service.submitBotPicks(2);
+
+    expect((prisma as any).playerPick.createMany).toHaveBeenCalled();
+    expect(result.picksSeeded).toBe(1);
+  });
+
+  it('skips teams that already have picks for the GW', async () => {
+    (prisma as any).gameweek = {
+      findUnique: jest.fn().mockResolvedValue({ id: 1, competitionId: 39 }),
+    };
+    (prisma as any).fantasyTeam = {
+      findMany: jest.fn().mockResolvedValue([{ id: 'team-1' }]),
+    };
+    (prisma as any).playerPick = {
+      findMany: jest.fn().mockResolvedValue([
+        { playerId: 1, isCaptain: true, isViceCaptain: false, isStarting: true, benchOrder: null },
+      ]),
+      createMany: jest.fn(),
+    };
+
+    const result = await service.submitBotPicks(1);
+
+    expect((prisma as any).playerPick.createMany).not.toHaveBeenCalled();
+    expect(result.picksSeeded).toBe(0);
+  });
+});

@@ -197,7 +197,57 @@ export class SimulationService {
   }
 
   async submitBotPicks(gwId: number): Promise<{ bots: number; picksSeeded: number }> {
-    throw new Error('Not implemented');
+    const gw = await this.prisma.gameweek.findUnique({ where: { id: gwId } });
+    if (!gw) throw new NotFoundException(`Gameweek ${gwId} not found`);
+
+    // Get all bot teams (users whose email matches bot pattern)
+    const botTeams = await this.prisma.fantasyTeam.findMany({
+      where: {
+        competitionId: gw.competitionId,
+        user: { email: { contains: '@sim.test' } },
+      },
+    });
+
+    let picksSeeded = 0;
+
+    for (const team of botTeams) {
+      // Check if picks already exist for this GW
+      const existingPicks = await this.prisma.playerPick.findMany({
+        where: { fantasyTeamId: team.id, gameweekId: gwId },
+      });
+
+      if (existingPicks.length > 0) continue; // already seeded
+
+      // Seed from most recent previous GW's picks
+      const previousPicks = await this.prisma.playerPick.findMany({
+        where: { fantasyTeamId: team.id, gameweekId: { not: gwId } },
+        orderBy: { gameweek: { number: 'desc' } },
+        take: 15,
+      });
+
+      if (previousPicks.length === 0) {
+        this.logger.warn(`Bot team ${team.id} has no previous picks to seed from`);
+        continue;
+      }
+
+      await this.prisma.playerPick.createMany({
+        data: previousPicks.map((p) => ({
+          fantasyTeamId: team.id,
+          playerId: p.playerId,
+          gameweekId: gwId,
+          isCaptain: p.isCaptain,
+          isViceCaptain: p.isViceCaptain,
+          isStarting: p.isStarting,
+          benchOrder: p.benchOrder,
+          multiplier: 1,
+        })),
+        skipDuplicates: true,
+      });
+
+      picksSeeded++;
+    }
+
+    return { bots: botTeams.length, picksSeeded };
   }
 
   async finalizeGameweek(gwId: number): Promise<{ gameweekId: number; teamsScored: number; nextGameweekId: number | null }> {
