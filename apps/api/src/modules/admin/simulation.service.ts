@@ -218,17 +218,21 @@ export class SimulationService {
 
       if (existingPicks.length > 0) continue; // already seeded
 
-      // Seed from most recent previous GW's picks
-      const previousPicks = await this.prisma.playerPick.findMany({
+      // Find the most recent prior GW this team has picks for
+      const latestPriorPick = await this.prisma.playerPick.findFirst({
         where: { fantasyTeamId: team.id, gameweekId: { not: gwId } },
         orderBy: { gameweek: { number: 'desc' } },
-        take: 15,
+        select: { gameweekId: true },
       });
 
-      if (previousPicks.length === 0) {
+      if (!latestPriorPick) {
         this.logger.warn(`Bot team ${team.id} has no previous picks to seed from`);
         continue;
       }
+
+      const previousPicks = await this.prisma.playerPick.findMany({
+        where: { fantasyTeamId: team.id, gameweekId: latestPriorPick.gameweekId },
+      });
 
       await this.prisma.playerPick.createMany({
         data: previousPicks.map((p) => ({

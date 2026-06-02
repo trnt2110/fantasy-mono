@@ -150,16 +150,23 @@ describe('SimulationService.submitBotPicks', () => {
     (prisma as any).playerPick = {
       findMany: jest.fn()
         .mockResolvedValueOnce([])  // no picks for GW2
-        .mockResolvedValueOnce([    // picks from previous GW
+        .mockResolvedValueOnce([    // picks from previous GW (GW1)
           { playerId: 1, isCaptain: true, isViceCaptain: false, isStarting: true, benchOrder: null },
           { playerId: 2, isCaptain: false, isViceCaptain: true, isStarting: true, benchOrder: null },
         ]),
+      findFirst: jest.fn().mockResolvedValue({ gameweekId: 1 }),  // most recent prior GW
       createMany: jest.fn().mockResolvedValue({ count: 2 }),
     };
 
     const result = await service.submitBotPicks(2);
 
-    expect((prisma as any).playerPick.createMany).toHaveBeenCalled();
+    expect((prisma as any).playerPick.createMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.arrayContaining([
+          expect.objectContaining({ gameweekId: 2 }),
+        ]),
+      }),
+    );
     expect(result.picksSeeded).toBe(1);
   });
 
