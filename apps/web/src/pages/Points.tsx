@@ -104,11 +104,11 @@ function PickRow({ pick }: { pick: ApiPick }) {
             ? 'text-game-neon'
             : 'text-slate-500'
         }`}>
-          {/* gwPoints is raw stat from API; multiplier (2 for captain) applied here */}
-          {pick.gwPoints !== null ? pick.gwPoints * pick.multiplier : '—'}
+          {/* gwPoints is raw; captain earns ×2 (multiplier col is always 1 in DB) */}
+          {pick.gwPoints !== null ? pick.gwPoints * (pick.isCaptain ? 2 : 1) : '—'}
         </div>
         {pick.isCaptain && pick.gwPoints !== null && (
-          <div className="text-xs text-game-gold/70">×{pick.multiplier}</div>
+          <div className="text-xs text-game-gold/70">×2</div>
         )}
       </div>
     </div>

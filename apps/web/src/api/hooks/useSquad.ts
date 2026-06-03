@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '../client'
 import { useAuthStore } from '../../store/auth.store'
-import type { ApiResponse, ApiFantasyTeam, ApiListResponse, ApiPick } from '../types'
+import type { ApiResponse, ApiFantasyTeam, ApiPick } from '../types'
 
 export function useMyFantasyTeam() {
   const { competitionId, accessToken } = useAuthStore()
@@ -25,7 +25,7 @@ export function useGwPicks(gameweekId: number | undefined) {
   return useQuery({
     queryKey: ['picks', gameweekId, fantasyTeamId],
     queryFn: async () => {
-      const res = await apiClient.get<ApiListResponse<ApiPick>>(`/picks/${gameweekId}`, {
+      const res = await apiClient.get<ApiResponse<ApiPick[]>>(`/picks/${gameweekId}`, {
         params: { fantasyTeamId },
       })
       return res.data.data.map(p => ({
