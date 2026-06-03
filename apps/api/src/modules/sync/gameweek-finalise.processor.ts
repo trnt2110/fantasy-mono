@@ -56,6 +56,35 @@ export class GameweekFinaliseProcessor extends WorkerHost {
         where: { id: nextGw.id },
         data: { isCurrent: true },
       });
+
+      // Seed next GW picks for all teams — copy verbatim from current GW picks
+      const teams = await this.prisma.fantasyTeam.findMany({
+        where: { competitionId },
+        select: { id: true },
+      });
+      for (const team of teams) {
+        const alreadyHasPicks = await this.prisma.playerPick.findFirst({
+          where: { fantasyTeamId: team.id, gameweekId: nextGw.id },
+        });
+        if (alreadyHasPicks) continue;
+        const prevPicks = await this.prisma.playerPick.findMany({
+          where: { fantasyTeamId: team.id, gameweekId: gameweekId },
+        });
+        if (prevPicks.length === 0) continue;
+        await this.prisma.playerPick.createMany({
+          data: prevPicks.map((p) => ({
+            fantasyTeamId: p.fantasyTeamId,
+            playerId: p.playerId,
+            gameweekId: nextGw.id,
+            isCaptain: p.isCaptain,
+            isViceCaptain: p.isViceCaptain,
+            isStarting: p.isStarting,
+            benchOrder: p.benchOrder,
+            multiplier: 1,
+          })),
+          skipDuplicates: true,
+        });
+      }
     }
 
     // Invalidate leaderboard caches

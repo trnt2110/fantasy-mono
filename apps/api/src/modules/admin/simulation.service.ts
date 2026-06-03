@@ -338,6 +338,35 @@ export class SimulationService {
     });
     if (nextGw) {
       await this.prisma.gameweek.update({ where: { id: nextGw.id }, data: { isCurrent: true } });
+
+      // Seed next GW picks for all teams — copy verbatim from current GW picks
+      const teams = await this.prisma.fantasyTeam.findMany({
+        where: { competitionId: gw.competitionId },
+        select: { id: true },
+      });
+      for (const team of teams) {
+        const alreadyHasPicks = await this.prisma.playerPick.findFirst({
+          where: { fantasyTeamId: team.id, gameweekId: nextGw.id },
+        });
+        if (alreadyHasPicks) continue;
+        const prevPicks = await this.prisma.playerPick.findMany({
+          where: { fantasyTeamId: team.id, gameweekId: gwId },
+        });
+        if (prevPicks.length === 0) continue;
+        await this.prisma.playerPick.createMany({
+          data: prevPicks.map((p) => ({
+            fantasyTeamId: p.fantasyTeamId,
+            playerId: p.playerId,
+            gameweekId: nextGw.id,
+            isCaptain: p.isCaptain,
+            isViceCaptain: p.isViceCaptain,
+            isStarting: p.isStarting,
+            benchOrder: p.benchOrder,
+            multiplier: 1,
+          })),
+          skipDuplicates: true,
+        });
+      }
     }
 
     await this.redis.delByPattern(`leaderboard:global:${gw.competitionId}:*`);
@@ -346,6 +375,32 @@ export class SimulationService {
     const scored = await this.prisma.gameweekScore.count({ where: { gameweekId: gwId } });
     this.logger.log(`GW ${gwId} finalized — ${scored} teams scored. Next GW: ${nextGw?.id ?? 'none'}`);
     return { gameweekId: gwId, teamsScored: scored, nextGameweekId: nextGw?.id ?? null };
+  }
+
+  async resetBots(competitionId: number): Promise<{ deleted: number }> {
+    const bots = await this.prisma.user.findMany({
+      where: { email: { contains: '@sim.test' } },
+      select: { id: true },
+    });
+
+    if (bots.length === 0) return { deleted: 0 };
+
+    const botIds = bots.map((b) => b.id);
+
+    // Delete in dependency order: picks → teams → users
+    const teamIds = (
+      await this.prisma.fantasyTeam.findMany({
+        where: { userId: { in: botIds }, competitionId },
+        select: { id: true },
+      })
+    ).map((t) => t.id);
+
+    await this.prisma.playerPick.deleteMany({ where: { fantasyTeamId: { in: teamIds } } });
+    await this.prisma.fantasyTeam.deleteMany({ where: { id: { in: teamIds } } });
+    await this.prisma.user.deleteMany({ where: { id: { in: botIds } } });
+
+    this.logger.log(`Reset ${bots.length} bots for competition ${competitionId}`);
+    return { deleted: bots.length };
   }
 
   async getStatus(competitionId: number) {
