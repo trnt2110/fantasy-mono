@@ -6,6 +6,7 @@ import { SquadSelection } from '../pages/SquadSelection'
 import { PlayerSelection } from '../pages/PlayerSelection'
 import { Fixtures } from '../pages/Fixtures'
 import { Leagues } from '../pages/Leagues'
+import { Points } from '../pages/Points'
 import { useAuthStore } from '../store/auth.store'
 import { useMyFantasyTeam } from '../api/hooks'
 import { ErrorBoundary } from './ErrorBoundary'
@@ -51,6 +52,7 @@ export function AppShell() {
           {page === 'players'  && <PlayerSelection />}
           {page === 'fixtures' && <Fixtures />}
           {page === 'leagues'  && <Leagues />}
+          {page === 'points'   && <Points />}
         </div>
 
         <BottomNav active={page} onChange={setPage} />

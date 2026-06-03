@@ -9,6 +9,7 @@ const ITEMS: NavItem[] = [
   { id: 'players',  icon: '🔍', label: 'Players' },
   { id: 'fixtures', icon: '📅', label: 'Fixtures' },
   { id: 'leagues',  icon: '🏆', label: 'Leagues' },
+  { id: 'points',   icon: '📊', label: 'Points' },
 ]
 
 export function BottomNav({ active, onChange }: {

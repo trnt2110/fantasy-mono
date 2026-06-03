@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { id: 'players',  icon: '🔍', label: 'Players',    sub: 'Browse & pick' },
   { id: 'fixtures', icon: '📅', label: 'Fixtures',   sub: 'Schedule' },
   { id: 'leagues',  icon: '🏆', label: 'Leagues',    sub: 'Standings' },
+  { id: 'points',   icon: '📊', label: 'Points',     sub: 'GW scores' },
 ]
 
 export function Sidebar({ active, onChange }: { active: string; onChange: (id: string) => void }) {
