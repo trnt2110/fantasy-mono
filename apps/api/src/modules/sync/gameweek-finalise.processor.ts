@@ -63,27 +63,31 @@ export class GameweekFinaliseProcessor extends WorkerHost {
         select: { id: true },
       });
       for (const team of teams) {
-        const alreadyHasPicks = await this.prisma.playerPick.findFirst({
-          where: { fantasyTeamId: team.id, gameweekId: nextGw.id },
-        });
-        if (alreadyHasPicks) continue;
-        const prevPicks = await this.prisma.playerPick.findMany({
-          where: { fantasyTeamId: team.id, gameweekId: gameweekId },
-        });
-        if (prevPicks.length === 0) continue;
-        await this.prisma.playerPick.createMany({
-          data: prevPicks.map((p) => ({
-            fantasyTeamId: p.fantasyTeamId,
-            playerId: p.playerId,
-            gameweekId: nextGw.id,
-            isCaptain: p.isCaptain,
-            isViceCaptain: p.isViceCaptain,
-            isStarting: p.isStarting,
-            benchOrder: p.benchOrder,
-            multiplier: 1,
-          })),
-          skipDuplicates: true,
-        });
+        try {
+          const alreadyHasPicks = await this.prisma.playerPick.findFirst({
+            where: { fantasyTeamId: team.id, gameweekId: nextGw.id },
+          });
+          if (alreadyHasPicks) continue;
+          const prevPicks = await this.prisma.playerPick.findMany({
+            where: { fantasyTeamId: team.id, gameweekId: gameweekId },
+          });
+          if (prevPicks.length === 0) continue;
+          await this.prisma.playerPick.createMany({
+            data: prevPicks.map((p) => ({
+              fantasyTeamId: p.fantasyTeamId,
+              playerId: p.playerId,
+              gameweekId: nextGw.id,
+              isCaptain: p.isCaptain,
+              isViceCaptain: p.isViceCaptain,
+              isStarting: p.isStarting,
+              benchOrder: p.benchOrder,
+              multiplier: 1,
+            })),
+            skipDuplicates: true,
+          });
+        } catch (err) {
+          this.logger.warn(`Failed to seed picks for team ${team.id} into GW ${nextGw.id}: ${err}`);
+        }
       }
     }
 
