@@ -1,18 +1,39 @@
-import { useState } from 'react'
-import { useAdminCompetitions, useUpdateCompetitionAlias } from '../../api/hooks/useAdminAliases'
+import { useState, useRef } from 'react'
+import { useAdminCompetitions, useUpdateCompetitionAlias, useImportAliases } from '../../api/hooks/useAdminAliases'
 import { EditableCell } from './EditableCell'
+import type { ImportResult } from '../../api/types'
 
 type Filter = 'all' | 'unaliased' | 'aliased'
 
 export function AdminCompetitions() {
   const [filter, setFilter] = useState<Filter>('all')
   const [toast, setToast] = useState<string | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
   const { data, isLoading } = useAdminCompetitions(filter)
   const updateAlias = useUpdateCompetitionAlias()
+  const importAliases = useImportAliases()
 
   function showToast(msg: string) {
     setToast(msg)
     setTimeout(() => setToast(null), 4000)
+  }
+
+  function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const fd = new FormData()
+    fd.append('competitions', file)
+    importAliases.mutate(fd, {
+      onSuccess: (result: ImportResult) => {
+        const s = result.competitions
+        showToast(s
+          ? `Competitions: ${s.processed} aliased, ${s.skipped} skipped${s.errors.length ? `, ${s.errors.length} errors` : ''}`
+          : 'No competitions file processed'
+        )
+      },
+      onError: () => showToast('Import failed — check console'),
+    })
+    e.target.value = ''
   }
 
   return (
@@ -28,6 +49,15 @@ export function AdminCompetitions() {
           <option value="aliased">Aliased only</option>
         </select>
         <p className="text-slate-500 text-xs ml-auto">{data?.length ?? 0} competitions</p>
+        <button
+          onClick={() => fileRef.current?.click()}
+          disabled={importAliases.isPending}
+          className="px-4 py-2 bg-game-neon/10 border border-game-neon/30 text-game-neon
+            rounded-lg text-sm hover:bg-game-neon/20 transition-colors disabled:opacity-50"
+        >
+          {importAliases.isPending ? 'Importing...' : 'Import competitions CSV'}
+        </button>
+        <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleFileUpload} />
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-white/10">

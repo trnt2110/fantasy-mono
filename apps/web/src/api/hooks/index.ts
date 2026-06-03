@@ -1,6 +1,7 @@
 export * from './useAuth'
 export * from './useClubs'
 export * from './useCurrentGameweek'
+export * from './useGameweeks'
 export * from './useSquad'
 export * from './usePlayers'
 export * from './useFixtures'

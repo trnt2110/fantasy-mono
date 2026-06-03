@@ -8,16 +8,16 @@ export class FixturesController {
   constructor(private readonly fixturesService: FixturesService) {}
 
   @Get()
-  find(
+  async find(
     @Query('gameweekId') gameweekId: string,
     @Query('clubId') clubId: string,
     @Query('upcoming') upcoming: string,
   ) {
     if (gameweekId) {
-      return this.fixturesService.findByGameweek(Number(gameweekId));
+      return { data: await this.fixturesService.findByGameweek(Number(gameweekId)) };
     }
     if (clubId && upcoming === 'true') {
-      return this.fixturesService.findUpcomingByClub(Number(clubId));
+      return { data: await this.fixturesService.findUpcomingByClub(Number(clubId)) };
     }
     throw new BadRequestException('Provide gameweekId or clubId with upcoming=true');
   }

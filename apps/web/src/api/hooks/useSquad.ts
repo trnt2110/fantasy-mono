@@ -28,7 +28,10 @@ export function useGwPicks(gameweekId: number | undefined) {
       const res = await apiClient.get<ApiListResponse<ApiPick>>(`/picks/${gameweekId}`, {
         params: { fantasyTeamId },
       })
-      return res.data.data
+      return res.data.data.map(p => ({
+        ...p,
+        position: (p.position === ('GK' as string) ? 'GKP' : p.position) as ApiPick['position'],
+      }))
     },
     enabled: !!gameweekId && !!fantasyTeamId && !!accessToken,
     staleTime: 60 * 1000,

@@ -33,42 +33,42 @@ export class AdminController {
   // ─── Alias overview ───────────────────────────────────────────────────────
 
   @Get('aliases')
-  getAliasesSummary() {
-    return this.adminService.getAliasesSummary();
+  async getAliasesSummary() {
+    return { data: await this.adminService.getAliasesSummary() };
   }
 
   @Get('aliases/clubs')
-  getClubs(
+  async getClubs(
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
     @Query('search', new DefaultValuePipe('')) search: string,
     @Query('filter', new DefaultValuePipe('all')) filter: 'all' | 'unaliased' | 'aliased',
   ) {
-    return this.adminService.getClubs(page, limit, search, filter);
+    return { data: await this.adminService.getClubs(page, limit, search, filter) };
   }
 
   @Get('aliases/players')
-  getPlayers(
+  async getPlayers(
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
     @Query('search', new DefaultValuePipe('')) search: string,
     @Query('filter', new DefaultValuePipe('all')) filter: 'all' | 'unaliased' | 'aliased',
   ) {
-    return this.adminService.getPlayers(page, limit, search, filter);
+    return { data: await this.adminService.getPlayers(page, limit, search, filter) };
   }
 
   @Get('aliases/competitions')
-  getCompetitions(
+  async getCompetitions(
     @Query('filter', new DefaultValuePipe('all')) filter: 'all' | 'unaliased' | 'aliased',
   ) {
-    return this.adminService.getCompetitions(filter);
+    return { data: await this.adminService.getCompetitions(filter) };
   }
 
   // ─── Club aliases ─────────────────────────────────────────────────────────
 
   @Put('aliases/clubs/:id')
-  upsertClubAlias(@Param('id', ParseIntPipe) id: number, @Body() dto: UpsertClubAliasDto) {
-    return this.adminService.upsertClubAlias(id, dto);
+  async upsertClubAlias(@Param('id', ParseIntPipe) id: number, @Body() dto: UpsertClubAliasDto) {
+    return { data: await this.adminService.upsertClubAlias(id, dto) };
   }
 
   @Delete('aliases/clubs/:id')
@@ -80,8 +80,8 @@ export class AdminController {
   // ─── Player aliases ───────────────────────────────────────────────────────
 
   @Put('aliases/players/:id')
-  upsertPlayerAlias(@Param('id', ParseIntPipe) id: number, @Body() dto: UpsertPlayerAliasDto) {
-    return this.adminService.upsertPlayerAlias(id, dto);
+  async upsertPlayerAlias(@Param('id', ParseIntPipe) id: number, @Body() dto: UpsertPlayerAliasDto) {
+    return { data: await this.adminService.upsertPlayerAlias(id, dto) };
   }
 
   @Delete('aliases/players/:id')
@@ -93,8 +93,8 @@ export class AdminController {
   // ─── Competition aliases ──────────────────────────────────────────────────
 
   @Put('aliases/competitions/:id')
-  upsertCompetitionAlias(@Param('id', ParseIntPipe) id: number, @Body() dto: UpsertCompetitionAliasDto) {
-    return this.adminService.upsertCompetitionAlias(id, dto);
+  async upsertCompetitionAlias(@Param('id', ParseIntPipe) id: number, @Body() dto: UpsertCompetitionAliasDto) {
+    return { data: await this.adminService.upsertCompetitionAlias(id, dto) };
   }
 
   @Delete('aliases/competitions/:id')
@@ -107,13 +107,13 @@ export class AdminController {
 
   @Post('import/aliases')
   @UseInterceptors(FileFieldsInterceptor(
-    [{ name: 'clubs', maxCount: 1 }, { name: 'players', maxCount: 1 }],
+    [{ name: 'clubs', maxCount: 1 }, { name: 'players', maxCount: 1 }, { name: 'competitions', maxCount: 1 }],
     { limits: { fileSize: 5 * 1024 * 1024 } },
   ))
-  importAliases(
-    @UploadedFiles() files: { clubs?: MulterFile[]; players?: MulterFile[] },
-  ): Promise<{ clubs?: ImportSummary; players?: ImportSummary }> {
-    return this.adminService.importAliases(files ?? {});
+  async importAliases(
+    @UploadedFiles() files: { clubs?: MulterFile[]; players?: MulterFile[]; competitions?: MulterFile[] },
+  ): Promise<{ data: { clubs?: ImportSummary; players?: ImportSummary; competitions?: ImportSummary } }> {
+    return { data: await this.adminService.importAliases(files ?? {}) };
   }
 
   // ─── Sync triggers ────────────────────────────────────────────────────────

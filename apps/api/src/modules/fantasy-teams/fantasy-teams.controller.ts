@@ -13,20 +13,20 @@ export class FantasyTeamsController {
   }
 
   @Get('mine')
-  findMine(
+  async findMine(
     @CurrentUser('id') userId: string,
     @Query('competitionId', ParseIntPipe) competitionId: number,
   ) {
-    return this.fantasyTeamsService.findMine(userId, competitionId);
+    return { data: await this.fantasyTeamsService.findMine(userId, competitionId) };
   }
 
   @Get(':id')
-  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser('id') userId: string) {
-    return this.fantasyTeamsService.findOne(id, userId);
+  async findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser('id') userId: string) {
+    return { data: await this.fantasyTeamsService.findOne(id, userId) };
   }
 
   @Get(':id/scores')
-  findScores(@Param('id', ParseUUIDPipe) id: string) {
-    return this.fantasyTeamsService.findScores(id);
+  async findScores(@Param('id', ParseUUIDPipe) id: string) {
+    return { data: await this.fantasyTeamsService.findScores(id) };
   }
 }

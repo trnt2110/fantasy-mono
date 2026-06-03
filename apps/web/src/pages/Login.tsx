@@ -10,11 +10,11 @@ export function Login() {
   const accessToken = useAuthStore(s => s.accessToken)
   const { mutate: login, isPending, error } = useLogin()
 
-  useEffect(() => { if (accessToken) navigate('/') }, [accessToken, navigate])
+  useEffect(() => { if (accessToken) navigate('/squad') }, [accessToken, navigate])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    login({ email, password }, { onSuccess: () => navigate('/') })
+    login({ email, password }, { onSuccess: () => navigate('/squad') })
   }
 
   return (

@@ -1,0 +1,99 @@
+id,real_name,competition_id,alias_name,alias_short_name,alias_city
+33,Manchester United,39,Man Red,MRD,Manchester
+34,Newcastle,39,Tyneside FC,TYN,Newcastle
+35,Bournemouth,39,South Coast Red,SCR,Bournemouth
+36,Fulham,39,West London White,WLW,Fulham
+39,Wolves,39,West Midlands Gold,WMG,Wolverhampton
+40,Liverpool,39,Merseyside Red,MRS,Liverpool
+41,Southampton,39,South Coast FC,SCF,Southampton
+42,Arsenal,39,North London Red,NLR,Arsenal
+45,Everton,39,Merseyside Blue,MBL,Everton
+46,Leicester,39,East Midlands Blue,EMB,Leicester
+47,Tottenham,39,North London White,NLW,London
+48,West Ham,39,East London,ELN,London
+49,Chelsea,39,West London Blue,WLB,London
+50,Manchester City,39,Man Blue,MBC,Manchester
+51,Brighton,39,South Coast Blue,SCB,Brighton
+52,Crystal Palace,39,South London Red,SLR,London
+55,Brentford,39,West London FC,WLF,London
+57,Ipswich,39,East Anglia Blue,EAB,Ipswich
+65,Nottingham Forest,39,East Midlands Red,EMR,Nottingham
+66,Aston Villa,39,Midlands Villa,MVL,Birmingham
+77,Angers,61,Angers SCO,ANG,Angers
+79,Lille,61,Les Dogues,LDG,Lille
+80,Lyon,61,Les Gones,LGN,Lyon
+81,Marseille,61,Les Phocéens,LPH,Marseille
+82,Montpellier,61,La Paillade,LPA,Montpellier
+83,Nantes,61,Les Canaris,LCN,Nantes
+84,Nice,61,Les Aiglons,LAG,Nice
+85,Paris Saint Germain,61,Les Parisiens,LPS,Paris
+91,Monaco,61,Les Rouges et Blancs,LRB,Monaco
+93,Reims,61,Les Rouge et Blanc,LRN,Reims
+94,Rennes,61,Les Rouge et Noir,LRR,Rennes
+95,Strasbourg,61,Les Alsaciens,LAL,Strasbourg
+96,Toulouse,61,Les Violets,LVI,Toulouse
+106,Stade Brestois 29,61,Brest FC,BRS,Brest
+108,Auxerre,61,Les Burgundiens,LBG,Auxerre
+111,Le Havre,61,Les Ciel et Marine,LCM,Le Havre
+112,Metz,61,Les Grenats,LGR,Metz
+116,Lens,61,Les Sang et Or,LSO,Lens
+1063,Saint Etienne,61,Les Verts,LVR,Saint-Etienne
+157,Bayern München,78,Die Roten,DRT,Munich
+160,SC Freiburg,78,Breisgau-Brasilianern,BBR,Freiburg
+161,VfL Wolfsburg,78,Die Wölfe,DWL,Wolfsburg
+162,Werder Bremen,78,Die Grün-Weißen,DGW,Bremen
+163,Borussia Mönchengladbach,78,Die Fohlen,DFN,Mönchengladbach
+164,FSV Mainz 05,78,Die Nullfünfer,DNF,Mainz
+165,Borussia Dortmund,78,Die Gelben,DGB,Dortmund
+167,1899 Hoffenheim,78,Die Kraichgauer,DKR,Hoffenheim
+168,Bayer Leverkusen,78,Die Werkself,DWS,Leverkusen
+169,Eintracht Frankfurt,78,Die Adler,DAD,Frankfurt
+170,FC Augsburg,78,Die Fuggerstädter,DFG,Augsburg
+172,VfB Stuttgart,78,Die Schwaben,DSW,Stuttgart
+173,RB Leipzig,78,Die Roten Bullen,DRB,Leipzig
+176,VfL Bochum,78,Die Unabsteigbaren,DUN,Bochum
+180,1. FC Heidenheim,78,FCH Heidenheim,FCH,Heidenheim
+182,Union Berlin,78,Die Eisernen,DEI,Berlin
+186,FC St. Pauli,78,Die Kiezkicker,DKK,Hamburg
+191,Holstein Kiel,78,Die Störche,DST,Kiel
+1660,SV Elversberg,78,Die Blauen,DBL,Elversberg
+487,Lazio,135,Biancocelesti,BCL,Rome
+489,AC Milan,135,Rossoneri,ROS,Milan
+490,Cagliari,135,Rossoblù Cagliari,RBG,Cagliari
+492,Napoli,135,Gli Azzurri,GAZ,Naples
+494,Udinese,135,Bianconeri Friulani,BFR,Udine
+495,Genoa,135,Il Grifone,GRF,Genoa
+496,Juventus,135,Bianconeri,BJN,Turin
+497,AS Roma,135,Giallorossi,GRS,Rome
+499,Atalanta,135,La Dea,LDA,Bergamo
+500,Bologna,135,Rossoblu Bologna,RBL,Bologna
+502,Fiorentina,135,La Viola,LVO,Florence
+503,Torino,135,Il Toro,TOR,Turin
+504,Hellas Verona,135,Gli Scaligeri,GSC,Verona
+505,Inter,135,Nerazzurri,NER,Milan
+511,Empoli,135,Gli Azzurri Toscani,GAT,Empoli
+517,Venezia,135,Gli Arancioneroverdi,GAV,Venice
+523,Parma,135,I Crociati,ICR,Parma
+867,Lecce,135,I Giallorossi Salentini,IGS,Lecce
+895,Como,135,Lariani,LAR,Como
+1579,Monza,135,I Biancorossi,IBR,Monza
+529,Barcelona,140,Barca FC,BAR,Barcelona
+530,Atletico Madrid,140,Mad. Rojo,MAR,Madrid
+531,Athletic Club,140,Los Leones,LLE,Bilbao
+532,Valencia,140,Los Ches,LCH,Valencia
+533,Villarreal,140,Yellow Sub.,YSB,Villarreal
+534,Las Palmas,140,Los Amarillos,LAM,Las Palmas
+536,Sevilla,140,Los Nervionenses,LNE,Seville
+537,Leganes,140,Los Pepineros,LPP,Leganés
+538,Celta Vigo,140,Los Célticos,LCL,Vigo
+540,Espanyol,140,Los Periquitos,LPQ,Barcelona
+541,Real Madrid,140,Mad. Blanco,MAB,Madrid
+542,Alaves,140,Los Babazorros,LBZ,Vitoria
+543,Real Betis,140,Los Verdiblancos,LVB,Seville
+546,Getafe,140,Los Azulones,LAZ,Getafe
+547,Girona,140,Els Vermells,EVR,Girona
+548,Real Sociedad,140,La Real,LRE,San Sebastián
+720,Valladolid,140,Los Pucelanos,LPU,Valladolid
+727,Osasuna,140,Los Rojillos,LRJ,Pamplona
+728,Rayo Vallecano,140,Los Franjirrojos,LFR,Madrid
+798,Mallorca,140,Els Vermells de Mallorca,EVM,Mallorca

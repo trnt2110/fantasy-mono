@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Param, ParseIntPipe, Body, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Delete, Get, Param, ParseIntPipe, Body, HttpCode, HttpStatus } from '@nestjs/common';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Role } from '@prisma/client';
 import { SimulationService } from './simulation.service';
@@ -17,6 +17,12 @@ export class SimulationController {
   @Post('bots')
   async createBots(@Body() dto: CreateBotsDto) {
     return { data: await this.simulation.createBots(dto) };
+  }
+
+  @Delete('bots')
+  @HttpCode(HttpStatus.OK)
+  async resetBots() {
+    return { data: await this.simulation.resetBots(39) };
   }
 
   @Post('gw/:gwId/open')

@@ -238,10 +238,12 @@ export class AdminService {
   async importAliases(files: {
     clubs?: MulterFile[];
     players?: MulterFile[];
-  }): Promise<{ clubs?: ImportSummary; players?: ImportSummary }> {
-    const result: { clubs?: ImportSummary; players?: ImportSummary } = {};
+    competitions?: MulterFile[];
+  }): Promise<{ clubs?: ImportSummary; players?: ImportSummary; competitions?: ImportSummary }> {
+    const result: { clubs?: ImportSummary; players?: ImportSummary; competitions?: ImportSummary } = {};
     if (files.clubs?.[0]) result.clubs = await this.importClubsCsv(files.clubs[0].buffer.toString('utf-8'));
     if (files.players?.[0]) result.players = await this.importPlayersCsv(files.players[0].buffer.toString('utf-8'));
+    if (files.competitions?.[0]) result.competitions = await this.importCompetitionsCsv(files.competitions[0].buffer.toString('utf-8'));
     return result;
   }
 
@@ -306,6 +308,39 @@ export class AdminService {
         where: { playerId: id },
         create: { playerId: id, name: row.alias_name.trim() },
         update: { name: row.alias_name.trim() },
+      });
+      processed++;
+    }
+
+    return { processed, skipped, errors };
+  }
+
+  private async importCompetitionsCsv(content: string): Promise<ImportSummary> {
+    const rows = parseCsvRows(content);
+    let processed = 0, skipped = 0;
+    const errors: ImportError[] = [];
+
+    const toProcess: Array<{ row: Record<string, string>; rowNum: number; id: number }> = [];
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const rowNum = i + 2;
+      if (!row.alias_name?.trim()) { skipped++; continue; }
+      const id = parseInt(row.id, 10);
+      if (isNaN(id)) { errors.push({ row: rowNum, id: row.id, error: 'Invalid ID' }); continue; }
+      toProcess.push({ row, rowNum, id });
+    }
+
+    const validIds = new Set(
+      (await this.prisma.competition.findMany({ where: { id: { in: toProcess.map(r => r.id) } }, select: { id: true } }))
+        .map(c => c.id),
+    );
+
+    for (const { row, rowNum, id } of toProcess) {
+      if (!validIds.has(id)) { errors.push({ row: rowNum, id, error: `Competition ${id} not found` }); continue; }
+      await this.prisma.competitionAlias.upsert({
+        where: { competitionId: id },
+        create: { competitionId: id, name: row.alias_name.trim(), shortName: row.alias_short_name?.trim() || null },
+        update: { name: row.alias_name.trim(), shortName: row.alias_short_name?.trim() || null },
       });
       processed++;
     }

@@ -58,6 +58,17 @@ export function useSubmitBotPicks() {
   })
 }
 
+export function useResetBots() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async () => {
+      const r = await apiClient.delete<{ data: { deleted: number } }>('/admin/simulate/bots')
+      return r.data.data
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: STATUS_KEY }),
+  })
+}
+
 export function useFinalizeGameweek() {
   const qc = useQueryClient()
   return useMutation({

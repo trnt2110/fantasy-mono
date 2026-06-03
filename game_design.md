@@ -135,6 +135,23 @@ Triggered during gameweek finalisation for starting players who played 0 minutes
 
 ---
 
+## Squad Inheritance (Between Gameweeks)
+
+After a gameweek is finalised, **each team's picks are automatically carried over** to the next GW as the starting point. The user does not need to resubmit from scratch.
+
+| Step | Trigger | Action |
+|---|---|---|
+| GW N finalised | `gameweek-finalise` processor completes | Copy GW N picks → GW N+1 picks for every team in that competition |
+| User wants changes | Before GW N+1 deadline | Make transfers and/or adjust starting XI / captain |
+| No action taken | Deadline passes | GW N carries over as-is; picks for GW N+1 are already in DB |
+
+**Rules:**
+- Picks are copied verbatim: same 15 players, same starting XI, same captain/vice-captain, same bench order
+- The user may adjust formation, captain, and bench order at any time before the deadline (no transfer needed)
+- If a transferred-out player's slot needs filling, the new player's pick row replaces the old one
+
+---
+
 ## Transfer Rules
 
 | Rule | Detail |
@@ -179,6 +196,24 @@ Triggered during gameweek finalisation for starting players who played 0 minutes
 - Price floor: 4.0m | Price ceiling: 15.0m
 - `PlayerPriceHistory` row written on each change
 - **Each competition maintains an independent price market.** Transfer activity in League mode (e.g. PL competition) does not affect Total mode prices, and vice versa. Each of the 6 competitions calculates price changes from transfer volume within that competition only.
+
+---
+
+## Scoring Display
+
+Two leaderboard views exist per competition:
+
+| View | What it shows | When available |
+|---|---|---|
+| **GW Leaderboard** | Each team's points earned in a single GW; ranked highest-to-lowest | After that GW is finalised |
+| **Overall Leaderboard** | Cumulative total points across all finished GWs; ranked highest-to-lowest | Updates after each GW finalises |
+
+`totalPoints` = sum of all `GameweekScore.points` up to and including the most recently finalised GW.
+
+The **Points / GW History** screen (in the main app) lets users:
+1. Select any finished GW via a tab/selector
+2. See the GW leaderboard for that week (who scored what)
+3. Review their own squad that was active for that GW (which 11 players they played, individual points, captain)
 
 ---
 

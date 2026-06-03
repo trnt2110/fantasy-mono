@@ -24,27 +24,27 @@ export class FantasyLeaguesController {
   constructor(private readonly fantasyLeagues: FantasyLeaguesService) {}
 
   @Post()
-  createLeague(@Req() req: Request & { user: JwtUser }, @Body() dto: CreateLeagueDto) {
-    return this.fantasyLeagues.createLeague(req.user.sub, dto);
+  async createLeague(@Req() req: Request & { user: JwtUser }, @Body() dto: CreateLeagueDto) {
+    return { data: await this.fantasyLeagues.createLeague(req.user.sub, dto) };
   }
 
   @Post('join')
-  joinLeague(@Req() req: Request & { user: JwtUser }, @Body() dto: JoinLeagueDto) {
-    return this.fantasyLeagues.joinLeague(req.user.sub, dto);
+  async joinLeague(@Req() req: Request & { user: JwtUser }, @Body() dto: JoinLeagueDto) {
+    return { data: await this.fantasyLeagues.joinLeague(req.user.sub, dto) };
   }
 
   @Get('mine')
-  getMyLeagues(@Req() req: Request & { user: JwtUser }) {
-    return this.fantasyLeagues.getMyLeagues(req.user.sub);
+  async getMyLeagues(@Req() req: Request & { user: JwtUser }) {
+    return { data: await this.fantasyLeagues.getMyLeagues(req.user.sub) };
   }
 
   @Get(':id/standings')
-  getStandings(
+  async getStandings(
     @Req() req: Request & { user: JwtUser },
     @Param('id', ParseIntPipe) leagueId: number,
     @Query('gameweekId') gameweekIdRaw?: string,
   ) {
     const gameweekId = gameweekIdRaw ? parseInt(gameweekIdRaw, 10) : undefined;
-    return this.fantasyLeagues.getStandings(leagueId, req.user.sub, gameweekId);
+    return { data: await this.fantasyLeagues.getStandings(leagueId, req.user.sub, gameweekId) };
   }
 }

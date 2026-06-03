@@ -2,6 +2,7 @@ import { useState } from 'react'
 import {
   useSimulationStatus,
   useCreateBots,
+  useResetBots,
   useOpenGameweek,
   useSubmitBotPicks,
   useFinalizeGameweek,
@@ -80,6 +81,7 @@ export function AdminSimulation() {
 
   const { data: status, isLoading, error } = useSimulationStatus()
   const createBots = useCreateBots()
+  const resetBots = useResetBots()
   const openGw = useOpenGameweek()
   const submitBotPicks = useSubmitBotPicks()
   const finalizeGw = useFinalizeGameweek()
@@ -106,6 +108,13 @@ export function AdminSimulation() {
         onError: () => showToast('Failed to create bots — check API logs'),
       },
     )
+  }
+
+  function handleResetBots() {
+    resetBots.mutate(undefined, {
+      onSuccess: (r) => showToast(`${r.deleted} bots deleted — ready to recreate`),
+      onError: () => showToast('Failed to reset bots — check API logs'),
+    })
   }
 
   function handleOpenGw() {
@@ -204,12 +213,21 @@ export function AdminSimulation() {
                 />
               </div>
             )}
-            <ActionBtn
-              label={(status?.botCount ?? 0) > 0 ? 'Reset Bots' : 'Create Bots'}
-              onClick={handleCreateBots}
-              isPending={createBots.isPending}
-              variant={(status?.botCount ?? 0) > 0 ? 'muted' : 'neon'}
-            />
+            {(status?.botCount ?? 0) > 0 ? (
+              <ActionBtn
+                label="Reset Bots"
+                onClick={handleResetBots}
+                isPending={resetBots.isPending}
+                variant="muted"
+              />
+            ) : (
+              <ActionBtn
+                label="Create Bots"
+                onClick={handleCreateBots}
+                isPending={createBots.isPending}
+                variant="neon"
+              />
+            )}
           </div>
         </div>
         {createBots.error && (

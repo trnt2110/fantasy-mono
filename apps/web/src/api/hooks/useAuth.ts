@@ -9,7 +9,7 @@ export function useLogin() {
     mutationFn: async (creds: { email: string; password: string }) => {
       const tokensRes = await apiClient.post<ApiResponse<AuthTokens>>('/auth/login', creds)
       const tokens = tokensRes.data.data
-      const meRes = await apiClient.get<ApiResponse<AuthUser>>('/users/me', {
+      const meRes = await apiClient.get<ApiResponse<AuthUser>>('/auth/me', {
         headers: { Authorization: `Bearer ${tokens.accessToken}` },
       })
       return { ...tokens, user: meRes.data.data }

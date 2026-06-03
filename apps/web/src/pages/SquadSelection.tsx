@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import { QueryErrorResetBoundary } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import {
   useCurrentGameweek,
   useGwPicks,
@@ -7,6 +8,7 @@ import {
   useClubsMap,
   usePlayerPerformances,
   usePlayerDetail,
+  useSubmitPicks,
 } from '../api/hooks'
 import { JerseyIcon } from '../components/ui/JerseyIcon'
 import { PosBadge } from '../components/ui/PosBadge'
@@ -243,13 +245,52 @@ function ListView({ squadByPos, clubsMap }: {
 }
 
 // --- Player Info Modal ---
-function PlayerModal({ pick, clubShort, onClose }: {
+function PlayerModal({ pick, clubShort, allPicks, gameweekId, isPastDeadline, onClose }: {
   pick: ApiPick
   clubShort: string
+  allPicks: ApiPick[]
+  gameweekId: number | undefined
+  isPastDeadline: boolean
   onClose: () => void
 }) {
+  const navigate = useNavigate()
   const { data: detail } = usePlayerDetail(pick.playerId)
   const { data: performances = [] } = usePlayerPerformances(pick.playerId)
+  const submitPicks = useSubmitPicks(gameweekId)
+
+  const [toast, setToast] = useState<string | null>(null)
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000) }
+
+  const isBenchPlayer = !pick.isStarting
+  const isAlreadyCaptain = pick.isCaptain
+
+  function handleCaptain() {
+    if (isPastDeadline) { showToast('Deadline passed — picks are locked'); return }
+    if (isBenchPlayer) { showToast('Bench players cannot be captain'); return }
+    if (isAlreadyCaptain) { showToast('Already captain'); return }
+
+    const startingIds = allPicks.filter(p => p.isStarting).map(p => p.playerId)
+    const currentVc = allPicks.find(p => p.isViceCaptain)
+    const currentCaptain = allPicks.find(p => p.isCaptain)
+    // If current VC is the new captain, promote old captain to VC
+    const newVcId = currentVc?.playerId === pick.playerId
+      ? (currentCaptain?.playerId ?? pick.playerId)
+      : (currentVc?.playerId ?? pick.playerId)
+    const benchOrder = Object.fromEntries(
+      allPicks.filter(p => !p.isStarting && p.benchOrder != null)
+        .map(p => [String(p.playerId), p.benchOrder!])
+    )
+    submitPicks.mutate(
+      { startingPlayerIds: startingIds, captainId: pick.playerId, viceCaptainId: newVcId, benchOrder },
+      { onSuccess: () => { showToast('Captain updated!'); onClose() }, onError: () => showToast('Failed to update captain') },
+    )
+  }
+
+  function handleTransfer() {
+    if (isPastDeadline) { showToast('Deadline passed — transfers are locked'); return }
+    navigate('/players')
+    onClose()
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
@@ -258,6 +299,13 @@ function PlayerModal({ pick, clubShort, onClose }: {
         className="relative game-card w-full max-w-sm p-5 anim-pop lg:max-w-md"
         onClick={e => e.stopPropagation()}
       >
+        {toast && (
+          <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-game-card border border-white/10
+            text-white text-sm font-medium px-4 py-2 rounded-full shadow-lg z-10 whitespace-nowrap">
+            {toast}
+          </div>
+        )}
+
         <button onClick={onClose}
           className="absolute top-4 right-4 text-slate-500 hover:text-game-red text-xl font-bold transition-colors">
           ✕
@@ -305,9 +353,27 @@ function PlayerModal({ pick, clubShort, onClose }: {
         )}
 
         <div className="flex gap-3">
-          <button className="btn-secondary flex-1 py-2.5">🔄 TRANSFER</button>
-          <button className="btn-primary flex-1 py-2.5">👑 CAPTAIN</button>
+          <button
+            onClick={handleTransfer}
+            disabled={submitPicks.isPending}
+            className="btn-secondary flex-1 py-2.5"
+          >
+            🔄 TRANSFER
+          </button>
+          <button
+            onClick={handleCaptain}
+            disabled={submitPicks.isPending || isAlreadyCaptain}
+            className={`flex-1 py-2.5 ${isAlreadyCaptain ? 'btn-secondary opacity-50' : 'btn-primary'}`}
+          >
+            {submitPicks.isPending ? '...' : isAlreadyCaptain ? '👑 CAPTAIN ✓' : '👑 CAPTAIN'}
+          </button>
         </div>
+
+        {isPastDeadline && (
+          <p className="text-center text-xs text-game-red mt-3 font-medium">
+            Deadline passed — picks locked
+          </p>
+        )}
       </div>
     </div>
   )
@@ -477,6 +543,9 @@ export function SquadSelection() {
         <PlayerModal
           pick={selectedPlayer}
           clubShort={selectedClubShort}
+          allPicks={picks}
+          gameweekId={gw?.id}
+          isPastDeadline={gw ? new Date(gw.deadlineTime) <= new Date() : false}
           onClose={() => setSelectedPlayer(null)}
         />
       )}

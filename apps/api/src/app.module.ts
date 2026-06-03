@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import * as path from 'path';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { PrismaModule } from './infrastructure/prisma/prisma.module';
 import { RedisModule } from './infrastructure/redis/redis.module';
@@ -27,7 +26,7 @@ import { FantasyLeaguesModule } from './modules/fantasy-leagues/fantasy-leagues.
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true, envFilePath: path.resolve(__dirname, '..', '.env') }),
+    ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
     RedisModule,
     ApiFootballModule,

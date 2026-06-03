@@ -113,9 +113,20 @@ export class FantasyTeamsService {
   async findMine(userId: string, competitionId: number) {
     const team = await this.prisma.fantasyTeam.findUnique({
       where: { userId_competitionId: { userId, competitionId } },
+      include: { user: { select: { username: true } } },
     });
     if (!team) throw new NotFoundException('Fantasy team not found');
-    return team;
+    return {
+      id: team.id,
+      userId: team.userId,
+      username: team.user.username,
+      competitionId: team.competitionId,
+      name: team.name,
+      budget: Number(team.budget),
+      totalValue: Number(team.totalValue),
+      formation: team.formation,
+      freeTransfers: team.freeTransfers,
+    };
   }
 
   async findOne(id: string, requestingUserId: string) {

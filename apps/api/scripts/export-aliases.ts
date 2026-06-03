@@ -1,6 +1,19 @@
 import { PrismaClient } from '@prisma/client';
-import { writeFileSync, mkdirSync } from 'fs';
+import { writeFileSync, mkdirSync, readFileSync } from 'fs';
 import { join } from 'path';
+
+// Load .env from cwd (run from apps/api/)
+try {
+  for (const line of readFileSync('.env', 'utf8').split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eq = trimmed.indexOf('=');
+    if (eq < 0) continue;
+    const key = trimmed.slice(0, eq).trim();
+    const val = trimmed.slice(eq + 1).trim();
+    if (!(key in process.env)) process.env[key] = val;
+  }
+} catch { /* no .env file */ }
 
 const prisma = new PrismaClient();
 
@@ -59,6 +72,27 @@ async function main() {
   }
   writeFileSync(join(exportsDir, 'players.csv'), playerLines.join('\n'), 'utf-8');
   console.log(`Exported ${players.length} players → exports/players.csv`);
+
+  // ── Competitions ──────────────────────────────────────────────────────────
+  const competitions = await prisma.competition.findMany({
+    include: { alias: true },
+    orderBy: { id: 'asc' },
+  });
+
+  const compLines = ['id,real_name,country,alias_name,alias_short_name'];
+  for (const comp of competitions) {
+    compLines.push(
+      [
+        comp.id,
+        csvEscape(comp.realName),
+        csvEscape(comp.country),
+        csvEscape(comp.alias?.name),
+        csvEscape(comp.alias?.shortName),
+      ].join(','),
+    );
+  }
+  writeFileSync(join(exportsDir, 'competitions.csv'), compLines.join('\n'), 'utf-8');
+  console.log(`Exported ${competitions.length} competitions → exports/competitions.csv`);
 }
 
 main()

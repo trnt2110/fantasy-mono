@@ -19,10 +19,10 @@ export class PicksController {
   }
 
   @Get(':gameweekId')
-  getPicks(
+  async getPicks(
     @Param('gameweekId', ParseIntPipe) gameweekId: number,
     @Query('fantasyTeamId', ParseUUIDPipe) fantasyTeamId: string,
   ) {
-    return this.picksService.getPicks(gameweekId, fantasyTeamId);
+    return { data: await this.picksService.getPicks(gameweekId, fantasyTeamId) };
   }
 }

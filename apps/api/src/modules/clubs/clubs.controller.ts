@@ -8,8 +8,8 @@ export class ClubsController {
   constructor(private readonly clubsService: ClubsService) {}
 
   @Get()
-  findAll(@Query('competitionId') competitionId: string) {
+  async findAll(@Query('competitionId') competitionId: string) {
     if (!competitionId) throw new BadRequestException('competitionId is required');
-    return this.clubsService.findByCompetition(Number(competitionId));
+    return { data: await this.clubsService.findByCompetition(Number(competitionId)) };
   }
 }

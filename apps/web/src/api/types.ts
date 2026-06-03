@@ -39,6 +39,10 @@ export interface ApiGameweek {
   id: number; competitionId: number; number: number
   deadlineTime: string; status: 'SCHEDULED' | 'ACTIVE' | 'SCORING' | 'FINISHED'; isCurrent: boolean
 }
+export interface ApiGameweekSummary {
+  id: number; number: number
+  status: 'SCHEDULED' | 'ACTIVE' | 'SCORING' | 'FINISHED'; deadlineTime: string
+}
 
 // Fixtures
 export interface ApiFixture {

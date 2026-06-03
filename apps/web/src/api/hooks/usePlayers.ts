@@ -12,15 +12,19 @@ export interface PlayerFilters {
   limit?: number
 }
 
+const toApiPos = (p?: string) => p === 'GKP' ? 'GK' : p
+const toClientPos = (p: string) => p === 'GK' ? 'GKP' : p
+
 export function usePlayers(filters: PlayerFilters = {}) {
   const competitionId = useAuthStore(s => s.competitionId)
   return useQuery({
     queryKey: ['players', competitionId, filters],
     queryFn: async () => {
       const res = await apiClient.get<ApiListResponse<ApiPlayer>>('/players', {
-        params: { competitionId, ...filters },
+        params: { competitionId, ...filters, position: toApiPos(filters.position) },
       })
-      return res.data
+      const list = res.data
+      return { ...list, data: list.data.map(p => ({ ...p, position: toClientPos(p.position) })) }
     },
     staleTime: 5 * 60 * 1000,
     placeholderData: prev => prev,

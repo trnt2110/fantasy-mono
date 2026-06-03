@@ -106,11 +106,12 @@ export function Step1PickPlayers({ pickedPlayers, budget, onAdd, onRemove, onNex
             text-slate-100 placeholder-slate-600 focus:outline-none focus:border-game-neon transition-all"
         />
         <div className="flex items-center gap-1.5 flex-shrink-0">
-          <span className="text-xs text-game-gold font-bold">£{maxPrice}m</span>
+          <span className="text-xs text-slate-400">Max</span>
+          <span className="text-xs text-slate-200 font-bold">£{maxPrice}m</span>
           <input
             type="range" min={4} max={15} step={0.5} value={maxPrice}
             onChange={e => setMaxPrice(parseFloat(e.target.value))}
-            className="w-16 accent-game-gold"
+            className="w-16 accent-game-neon"
           />
         </div>
       </div>
@@ -268,9 +269,9 @@ export function Step1PickPlayers({ pickedPlayers, budget, onAdd, onRemove, onNex
       <div className="flex items-center justify-between px-4 py-3 border-t border-game-border
         bg-game-card/60 flex-shrink-0">
         <div>
-          <div className="text-xs text-slate-500 uppercase tracking-wider">Budget</div>
-          <div className={`font-bangers text-lg tracking-wide ${budget < 5 ? 'text-red-400' : 'text-game-gold'}`}>
-            £{Math.max(0, budget).toFixed(1)}m
+          <div className="text-xs text-slate-500 uppercase tracking-wider">Remaining Budget</div>
+          <div className={`font-bangers text-lg tracking-wide ${budget < 0 ? 'text-red-400' : budget < 5 ? 'text-orange-400' : 'text-game-gold'}`}>
+            £{budget.toFixed(1)}m
           </div>
         </div>
         <div className="text-center text-xs text-slate-500">

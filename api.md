@@ -78,7 +78,7 @@
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | GET | `/competitions` | Public | List active competitions (alias-resolved names) |
-| GET | `/competitions/:id/gameweeks` | Public | Gameweeks with deadlines and statuses |
+| GET | `/gameweeks` | Public | All GWs for a competition — `?competitionId=` |
 
 **`GET /competitions` response shape (per entry):**
 ```json
@@ -187,6 +187,7 @@
 
 | Method | Path | Auth | Query | Description |
 |---|---|---|---|---|
+| GET | `/gameweeks` | Public | `?competitionId=` | All GWs for a competition (id, number, status, deadlineTime) ordered by number asc |
 | GET | `/gameweeks/current` | Public | `?competitionId=` | Current active GW + deadline time |
 
 **Response shape:**

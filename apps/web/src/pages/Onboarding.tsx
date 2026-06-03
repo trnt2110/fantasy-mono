@@ -148,7 +148,7 @@ function OnboardingWizard() {
   ] as const
 
   return (
-    <div className="min-h-screen bg-game-bg flex flex-col">
+    <div className="h-dvh bg-game-bg flex flex-col overflow-hidden">
       {/* Header */}
       <div className="flex-shrink-0 px-4 py-3 border-b border-game-border bg-game-card/50">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
