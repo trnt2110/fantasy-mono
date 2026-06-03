@@ -5,8 +5,7 @@ import { useFinishedGameweeks, useGwPicks, useGlobalLeaderboard } from '../api/h
 import { PosBadge } from '../components/ui/PosBadge'
 import { Skeleton } from '../components/ui/Skeleton'
 import { ErrorBoundary } from '../components/ErrorBoundary'
-import type { ApiLeaderboardEntry, ApiPick } from '../api/types'
-import type { Position } from '../data/mock'
+import type { ApiLeaderboardEntry, ApiPick, PickPosition } from '../api/types'
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
@@ -75,7 +74,7 @@ function PickRow({ pick }: { pick: ApiPick }) {
         transition-colors hover:bg-white/[0.02]
         ${!pick.isStarting ? 'opacity-60' : ''}`}
     >
-      <PosBadge pos={pick.position as Position} />
+      <PosBadge pos={pick.position} />
 
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5 min-w-0">
@@ -105,6 +104,7 @@ function PickRow({ pick }: { pick: ApiPick }) {
             ? 'text-game-neon'
             : 'text-slate-500'
         }`}>
+          {/* gwPoints is raw stat from API; multiplier (2 for captain) applied here */}
           {pick.gwPoints !== null ? pick.gwPoints * pick.multiplier : '—'}
         </div>
         {pick.isCaptain && pick.gwPoints !== null && (
@@ -115,7 +115,7 @@ function PickRow({ pick }: { pick: ApiPick }) {
   )
 }
 
-const POSITION_ORDER: Position[] = ['GKP', 'DEF', 'MID', 'FWD']
+const POSITION_ORDER: PickPosition[] = ['GKP', 'DEF', 'MID', 'FWD']
 
 function SquadSection({ picks, isLoading, gwNumber }: {
   picks: ApiPick[] | undefined
