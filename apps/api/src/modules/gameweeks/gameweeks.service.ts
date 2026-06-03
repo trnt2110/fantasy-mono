@@ -9,6 +9,14 @@ export class GameweeksService {
     private readonly redis: RedisService,
   ) {}
 
+  async findAll(competitionId: number) {
+    return this.prisma.gameweek.findMany({
+      where: { competitionId },
+      select: { id: true, number: true, status: true, deadlineTime: true },
+      orderBy: { number: 'asc' },
+    });
+  }
+
   async findCurrent(competitionId: number) {
     const cacheKey = `gameweek:current:${competitionId}`;
     return this.redis.getOrSet(cacheKey, 120, () =>

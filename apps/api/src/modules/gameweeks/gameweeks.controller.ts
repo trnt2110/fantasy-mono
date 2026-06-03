@@ -7,8 +7,13 @@ import { Public } from '../../common/decorators/public.decorator';
 export class GameweeksController {
   constructor(private readonly gameweeksService: GameweeksService) {}
 
+  @Get()
+  async findAll(@Query('competitionId', ParseIntPipe) competitionId: number) {
+    return { data: await this.gameweeksService.findAll(competitionId) };
+  }
+
   @Get('current')
-  findCurrent(@Query('competitionId', ParseIntPipe) competitionId: number) {
-    return this.gameweeksService.findCurrent(competitionId);
+  async findCurrent(@Query('competitionId', ParseIntPipe) competitionId: number) {
+    return { data: await this.gameweeksService.findCurrent(competitionId) };
   }
 }
