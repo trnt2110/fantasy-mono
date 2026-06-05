@@ -474,6 +474,11 @@ export function SquadSelection() {
       return
     }
 
+    if (!isValidSwap(playerOut, benchPick, squadByPos)) {
+      showSubToast('Invalid swap — would create invalid formation')
+      return
+    }
+
     const newStartingIds = picks
       .filter(p => p.isStarting)
       .map(p => p.playerId === playerOut.playerId ? benchPick.playerId : p.playerId)
