@@ -94,7 +94,7 @@ describe('SimulationService.openGameweek', () => {
       providers: [
         SimulationService,
         { provide: PrismaService, useValue: prisma },
-        { provide: RedisService, useValue: {} },
+        { provide: RedisService, useValue: { del: jest.fn() } },
         { provide: ScoringService, useValue: {} },
       ],
     }).compile();
