@@ -21,6 +21,7 @@ export interface ApiClub {
 export interface ApiPlayer {
   id: number; name: string; position: 'GKP' | 'DEF' | 'MID' | 'FWD'
   clubId: number; clubName: string; currentPrice: number; isAvailable: boolean; isAliased: boolean
+  totalPoints: number; currentGwPoints: number | null
 }
 export interface ApiPlayerDetail extends ApiPlayer {
   ownershipPct: number

@@ -1,10 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
 import { apiClient } from '../client'
 import { useAuthStore } from '../../store/auth.store'
-import type { ApiListResponse, ApiPlayer, ApiPlayerDetail, ApiResponse } from '../types'
+import type { ApiListResponse, ApiPlayer } from '../types'
 
 export interface PlayerFilters {
   position?: string
+  clubId?: number
   search?: string
   minPrice?: number
   maxPrice?: number
@@ -36,10 +37,10 @@ export function usePlayerDetail(playerId: number | null) {
   return useQuery({
     queryKey: ['player', playerId, competitionId],
     queryFn: async () => {
-      const res = await apiClient.get<ApiResponse<ApiPlayerDetail>>(`/players/${playerId}`, {
+      const res = await apiClient.get(`/players/${playerId}`, {
         params: { competitionId },
       })
-      return res.data.data
+      return res.data
     },
     enabled: playerId !== null,
     staleTime: 10 * 60 * 1000,
