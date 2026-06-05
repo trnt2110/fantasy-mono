@@ -321,6 +321,16 @@ Frontend (`apps/web/src/pages/admin/AdminSimulation.tsx`):
 
 See `docs/admin_guide.md` for the full simulation workflow.
 
+### Reset Bots fix ✅ (2026-06-03)
+
+**Bug:** "Reset Bots" button called the create-bots handler instead of a reset endpoint. No reset endpoint existed, so clicking it did nothing (existing bots skipped, count stayed at 10).
+
+**Fix:**
+- Backend: `DELETE /admin/simulate/bots` — deletes all `@sim.test` users and their teams/picks in dependency order (picks → teams → users)
+- Frontend: `useResetBots` hook + `handleResetBots` handler; button now calls the correct endpoint
+
+---
+
 ### Squad page shows empty pitch and list after team creation ✅ (2026-06-02)
 
 **Root cause: Systematic missing `{ data: ... }` wrapper across 6 API controllers**
@@ -343,9 +353,62 @@ The cascade on `/squad`:
 
 ---
 
+### Squad inheritance + Points page ✅ (2026-06-05)
+
+**Problem:** After GW1 was finalised and GW2 became current, the squad page showed 0/15 players (empty pitch) because no picks existed for GW2. No UI existed to review past GW scores.
+
+**What was built:**
+
+Backend:
+- `GET /gameweeks?competitionId=` — new list endpoint returning all GWs with id, number, status, deadlineTime ordered by number asc
+- Auto-seed picks on GW finalisation — after promoting next GW to `isCurrent`, each team's GW N picks are automatically copied verbatim to GW N+1. Added to both `SimulationService.finalizeGameweek()` and `GameweekFinaliseProcessor.process()`. Idempotent (skips teams already with picks); error-isolated per-team (one failure can't abort the rest of the loop)
+
+Frontend:
+- `useGameweeks()` + `useFinishedGameweeks()` hooks; `ApiGameweekSummary` type
+- `Points` page (`📊 Points` nav item) — finished GW tab selector (defaults to last GW), your score summary (GW pts / rank / total), GW leaderboard table with "you" row highlighted, and read-only squad list for the selected GW showing per-player points and captain ×2 multiplier
+
+**Design doc update:** `game_design.md` now explicitly documents Squad Inheritance (picks carry over between GWs) and Scoring Display (GW vs overall leaderboard, Points/GW History screen).
+
+**Notable fixes during review:**
+- `useGwPicks` was typed as `ApiListResponse<ApiPick>` (has `meta`) but endpoint returns `ApiResponse<ApiPick[]>` (no `meta`) — corrected
+- Captain ×2 multiplier in Points display used `pick.multiplier` (always 1 in DB); fixed to `pick.isCaptain ? 2 : 1`
+
+---
+
 ## Blocking Issues
 
 None currently.
+
+---
+
+## What's Next
+
+### Immediate — finish the game loop
+
+1. **Squad page: carry-over UX** — The squad now shows correctly after GW finalises (picks auto-seeded). Still needed: a clear banner on the squad page when the GW is `SCHEDULED` and the deadline hasn't passed yet, prompting the user to "Confirm squad for GW N" or make transfers. Currently nothing distinguishes "reading your carried-over squad" from "you've already confirmed picks."
+
+2. **Transfers flow** — Transfer UI exists (button navigates to `/players`) but the confirm-transfer path is not wired end-to-end. Need to verify `POST /transfers` is callable from the frontend and the squad page reflects the updated pick after confirmation.
+
+3. **Player seeding** — Remaining 4 leagues not yet synced (hit daily API quota):
+   - `POST /admin/sync/players/140` — La Liga
+   - `POST /admin/sync/players/135` — Serie A
+   - `POST /admin/sync/players/78` — Bundesliga
+   - `POST /admin/sync/players/61` — Ligue 1
+   - One per day on free plan (~40 API calls each)
+
+4. **Alias setup** — After each player sync, all new clubs/players have `isAliased: false`. Use admin panel (Players + Clubs tabs) to set in-game display names.
+
+5. **Fix cached API errors** — `ApiFootballClient` caches all HTTP 200 responses including those with `errors.plan` or `errors.rateLimit`. Fix: skip `redis.set` when `data.errors` is non-empty.
+
+### Medium-term
+
+6. **Multi-competition support** — Everything is hardcoded to `competitionId: 39` (Premier League). The simulation controller, `useSimulationStatus`, auth store default, and Points/Leagues pages all assume PL. Before opening other leagues, add a competition selector (or derive from user's teams).
+
+7. **Fixtures GW navigation** — GW nav arrows on the Fixtures page are visible but inert. Wire them to let users browse past and upcoming GWs.
+
+8. **Leaderboard pagination** — `GET /leaderboard/global` supports `?page=` but the Leagues and Points pages always load page 1 (top 20). Add "Load more" or pagination for large competitions.
+
+9. **`GameweekOpenGuard` alignment** — The guard blocks picks when deadline is past. But after GW finalises and next GW is `SCHEDULED` with a future deadline, the guard should allow picks. Verify the guard handles the `SCHEDULED` → `ACTIVE` transition correctly for the carried-over squad confirm flow.
 
 ---
 
