@@ -54,9 +54,7 @@ export class PlayersService {
           include,
           skip: (page - 1) * limit,
           take: limit,
-          // totalPoints is aggregated externally; sort by id as stable fallback
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          orderBy: { totalPoints: 'desc' } as any,
+          orderBy: { totalPoints: 'desc' },
         }),
         this.prisma.player.count({ where }),
       ]);
@@ -64,11 +62,10 @@ export class PlayersService {
       const data = players.map((p) => {
         const price = p.competitionPrices[0];
         const resolved = this.aliasService.resolvePlayer(p, price ? Number(price.currentPrice) : undefined);
-        const gwPerf = (p as unknown as { performances: Array<{ totalPoints: number }> }).performances;
         return {
           ...resolved,
-          totalPoints: (p as unknown as { totalPoints: number }).totalPoints,
-          currentGwPoints: gwPerf[0]?.totalPoints ?? null,
+          totalPoints: p.totalPoints,
+          currentGwPoints: p.performances[0]?.totalPoints ?? null,
         };
       });
 

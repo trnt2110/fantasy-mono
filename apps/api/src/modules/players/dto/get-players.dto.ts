@@ -41,5 +41,5 @@ export class GetPlayersDto {
   @IsInt()
   @Min(1)
   @Max(500)
-  limit?: number = 20;
+  limit?: number = 50;
 }

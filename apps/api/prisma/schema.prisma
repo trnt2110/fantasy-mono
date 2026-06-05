@@ -100,6 +100,7 @@ model Player {
   performances     PlayerPerformance[]
   picks            PlayerPick[]
   transfersIn      Transfer[] @relation("PlayerIn")
+  totalPoints      Int      @default(0)
   transfersOut     Transfer[] @relation("PlayerOut")
 }
 
