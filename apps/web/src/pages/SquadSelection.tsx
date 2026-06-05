@@ -16,6 +16,23 @@ import { DeadlineCountdown } from '../components/DeadlineCountdown'
 import { ErrorBoundary } from '../components/ErrorBoundary'
 import type { ApiPick } from '../api/types'
 
+const VALID_FORMATIONS = ['3-4-3', '3-5-2', '4-3-3', '4-4-2', '4-5-1', '5-3-2', '5-4-1']
+
+function isValidSwap(
+  playerOut: ApiPick,
+  benchPick: ApiPick,
+  squadByPos: { DEF: ApiPick[]; MID: ApiPick[]; FWD: ApiPick[] },
+): boolean {
+  if (playerOut.position === 'GKP') return benchPick.position === 'GKP'
+  if (benchPick.position === 'GKP') return false
+  const delta = (pos: string) =>
+    (benchPick.position === pos ? 1 : 0) - (playerOut.position === pos ? 1 : 0)
+  const newDef = squadByPos.DEF.length + delta('DEF')
+  const newMid = squadByPos.MID.length + delta('MID')
+  const newFwd = squadByPos.FWD.length + delta('FWD')
+  return VALID_FORMATIONS.includes(`${newDef}-${newMid}-${newFwd}`)
+}
+
 type SquadByPos = { GKP: ApiPick[]; DEF: ApiPick[]; MID: ApiPick[]; FWD: ApiPick[]; BENCH: ApiPick[] }
 
 function getClubShort(clubsMap: Map<number, string>, p: { clubId: number; clubName: string }): string {
@@ -185,8 +202,8 @@ function PitchView({ onPlayerClick, large = false, squadByPos, clubsMap, playerO
             </div>
             <div className="flex justify-around">
               {BENCH.map((p, i) => {
-                const isEligible = playerOut !== null && p.position === playerOut.position
-                const isDimmed = playerOut !== null && p.position !== playerOut.position
+                const isEligible = playerOut !== null && isValidSwap(playerOut, p, squadByPos)
+                const isDimmed   = playerOut !== null && !isValidSwap(playerOut, p, squadByPos)
                 return (
                   <div key={p.playerId} className="flex flex-col items-center gap-1">
                     <div className="text-xs font-bangers text-slate-500 bg-black/40 rounded-full w-5 h-5
@@ -456,10 +473,6 @@ export function SquadSelection() {
       setSelectedPlayer(benchPick)
       return
     }
-    if (benchPick.position !== playerOut.position) {
-      showSubToast(`${benchPick.position} can't sub for ${playerOut.position}`)
-      return
-    }
 
     const newStartingIds = picks
       .filter(p => p.isStarting)
@@ -636,6 +649,7 @@ export function SquadSelection() {
       {/* Player modal */}
       {selectedPlayer && (
         <PlayerModal
+          key={selectedPlayer.playerId}
           pick={selectedPlayer}
           clubShort={selectedClubShort}
           allPicks={picks}
