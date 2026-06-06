@@ -14,7 +14,8 @@ export interface PlayerFilters {
 }
 
 const toApiPos = (p?: string) => p === 'GKP' ? 'GK' : p
-const toClientPos = (p: string) => p === 'GK' ? 'GKP' : p
+const toClientPos = (p: string): 'GKP' | 'DEF' | 'MID' | 'FWD' =>
+  p === 'GK' ? 'GKP' : (p as 'DEF' | 'MID' | 'FWD')
 
 export function usePlayers(filters: PlayerFilters = {}) {
   const competitionId = useAuthStore(s => s.competitionId)
