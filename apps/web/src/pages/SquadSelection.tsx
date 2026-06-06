@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { QueryErrorResetBoundary } from '@tanstack/react-query'
 import {
   useCurrentGameweek,
@@ -14,6 +15,7 @@ import { PosBadge } from '../components/ui/PosBadge'
 import { Skeleton } from '../components/ui/Skeleton'
 import { DeadlineCountdown } from '../components/DeadlineCountdown'
 import { ErrorBoundary } from '../components/ErrorBoundary'
+import { useDraftStore } from '../store/draft.store'
 import type { ApiPick } from '../api/types'
 
 const VALID_FORMATIONS = ['3-4-3', '3-5-2', '4-3-3', '4-4-2', '4-5-1', '5-3-2', '5-4-1']
@@ -315,6 +317,15 @@ function PlayerModal({ pick, clubShort, allPicks, gameweekId, isPastDeadline, on
   const [toast, setToast] = useState<string | null>(null)
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000) }
 
+  const navigate = useNavigate()
+  const { setPlayerOut: setDraftPlayerOut } = useDraftStore()
+
+  function handleTransfer() {
+    setDraftPlayerOut(pick)
+    onClose()
+    navigate('/players')
+  }
+
   const totalPoints = performances.reduce((sum, p) => sum + p.totalPoints, 0)
 
   const isBenchPlayer = !pick.isStarting
@@ -408,6 +419,14 @@ function PlayerModal({ pick, clubShort, allPicks, gameweekId, isPastDeadline, on
           {submitPicks.isPending ? '...' : isAlreadyCaptain ? '👑 CAPTAIN ✓' : '👑 MAKE CAPTAIN'}
         </button>
 
+        {!isPastDeadline && (
+          <button
+            onClick={handleTransfer}
+            className="w-full py-2.5 mt-2 btn-secondary"
+          >
+            🔄 TRANSFER OUT
+          </button>
+        )}
         {isPastDeadline && (
           <p className="text-center text-xs text-game-red mt-3 font-medium">
             Deadline passed — picks locked
