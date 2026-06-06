@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { QueryErrorResetBoundary } from '@tanstack/react-query'
 import { useDraftStore } from '../store/draft.store'
@@ -35,6 +35,15 @@ export function PlayerSelection() {
   const [sortByPrice, setSortByPrice] = useState(false)
   const [limit, setLimit] = useState(50)
   const [selectedPlayer, setSelectedPlayer] = useState<ApiPlayer | null>(null)
+
+  useEffect(() => {
+    if (draftPlayerOut) setPosFilter(draftPlayerOut.position as Position)
+    else setPosFilter('ALL')
+  }, [draftPlayerOut?.playerId])
+
+  function handlePosFilter(pos: Position | 'ALL') { setPosFilter(pos); setLimit(50) }
+  function handleClubId(id: number | undefined) { setClubId(id); setLimit(50) }
+  function handleSearch(s: string) { setSearch(s); setLimit(50) }
 
   const pickedIds = useMemo(() => new Set(picks.map(p => p.playerId)), [picks])
 
@@ -79,7 +88,7 @@ export function PlayerSelection() {
           type="text"
           placeholder="Name…"
           value={search}
-          onChange={e => setSearch(e.target.value)}
+          onChange={e => handleSearch(e.target.value)}
           className="w-full bg-game-card border border-game-border rounded-xl
             pl-8 pr-3 py-2 text-sm text-slate-100 placeholder-slate-600
             focus:outline-none focus:border-game-neon transition-all font-nunito"
@@ -89,7 +98,7 @@ export function PlayerSelection() {
         {(['ALL', ...POSITIONS] as const).map(pos => (
           <button
             key={pos}
-            onClick={() => setPosFilter(pos)}
+            onClick={() => handlePosFilter(pos)}
             className={`font-bangers tracking-wider text-xs px-2.5 py-1.5 rounded-lg transition-all
               ${posFilter === pos
                 ? 'bg-game-purple text-white'
@@ -102,7 +111,7 @@ export function PlayerSelection() {
       </div>
       <select
         value={clubId ?? ''}
-        onChange={e => setClubId(e.target.value ? Number(e.target.value) : undefined)}
+        onChange={e => handleClubId(e.target.value ? Number(e.target.value) : undefined)}
         className="bg-game-card border border-game-border text-slate-300 text-sm
           px-3 py-2 rounded-xl focus:outline-none font-nunito cursor-pointer
           focus:border-game-neon transition-all"
@@ -223,7 +232,7 @@ export function PlayerSelection() {
                       type="text"
                       placeholder="Name…"
                       value={search}
-                      onChange={e => setSearch(e.target.value)}
+                      onChange={e => handleSearch(e.target.value)}
                       className="w-full bg-game-card border border-game-border rounded-xl
                         pl-8 pr-3 py-2.5 text-sm text-slate-100 placeholder-slate-600
                         focus:outline-none focus:border-game-neon transition-all font-nunito"
@@ -235,7 +244,7 @@ export function PlayerSelection() {
                       {(['ALL', ...POSITIONS] as const).map(pos => (
                         <button
                           key={pos}
-                          onClick={() => setPosFilter(pos)}
+                          onClick={() => handlePosFilter(pos)}
                           className={`font-bangers tracking-wider text-xs py-2 rounded-lg transition-all
                             ${posFilter === pos
                               ? 'bg-game-purple text-white shadow-[0_0_10px_rgba(168,85,247,0.4)]'
@@ -251,7 +260,7 @@ export function PlayerSelection() {
                     <div className="text-xs text-slate-500 font-medium tracking-wider uppercase mb-1.5">Club</div>
                     <select
                       value={clubId ?? ''}
-                      onChange={e => setClubId(e.target.value ? Number(e.target.value) : undefined)}
+                      onChange={e => handleClubId(e.target.value ? Number(e.target.value) : undefined)}
                       className="w-full bg-game-card border border-game-border text-slate-300 text-sm
                         px-3 py-2.5 rounded-xl focus:outline-none font-nunito cursor-pointer
                         focus:border-game-neon transition-all"
@@ -284,7 +293,7 @@ export function PlayerSelection() {
                     </div>
                   </div>
                   <button
-                    onClick={() => { setSearch(''); setPosFilter('ALL'); setClubId(undefined); setSortByPrice(false) }}
+                    onClick={() => { setSearch(''); setPosFilter('ALL'); setClubId(undefined); setSortByPrice(false); setLimit(50) }}
                     className="w-full text-center py-2 rounded-xl text-slate-500 hover:text-game-red
                       border border-game-border/50 hover:border-game-red/30 text-sm font-bold transition-all"
                   >
