@@ -40,6 +40,22 @@ export class GameweekFinaliseProcessor extends WorkerHost {
       throw err;
     }
 
+    // Roll up per-player totalPoints from all their finalised performances
+    const sums = await this.prisma.playerPerformance.groupBy({
+      by: ['playerId'],
+      where: { gameweek: { competitionId } },
+      _sum: { totalPoints: true },
+    });
+    await Promise.all(
+      sums.map(({ playerId, _sum }) =>
+        this.prisma.player.update({
+          where: { id: playerId },
+          data: { totalPoints: _sum.totalPoints ?? 0 },
+        }),
+      ),
+    );
+    await this.redis.delByPattern(`players:list:*`);
+
     // Mark gameweek FINISHED, unset isCurrent
     await this.prisma.gameweek.update({
       where: { id: gameweekId },
@@ -91,7 +107,8 @@ export class GameweekFinaliseProcessor extends WorkerHost {
       }
     }
 
-    // Invalidate leaderboard caches
+    // Invalidate caches
+    await this.redis.del(`gameweek:current:${competitionId}`);
     await this.redis.delByPattern(`leaderboard:global:${competitionId}:*`);
     await this.redis.delByPattern(`leaderboard:league:*`);
 

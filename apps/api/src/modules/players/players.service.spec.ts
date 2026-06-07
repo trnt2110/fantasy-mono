@@ -69,17 +69,28 @@ describe('PlayersService.findAll', () => {
   it('returns currentGwPoints from current gameweek performance', async () => {
     prisma.gameweek.findFirst.mockResolvedValue({ id: 7 });
     prisma.player.findMany.mockResolvedValue([
-      makePlayer({ performances: [{ totalPoints: 12 }] }),
+      makePlayer({ performances: [{ totalPoints: 12, gameweekId: 7 }] }),
     ]);
 
     const result = await service.findAll({ competitionId: 1 });
     expect((result.data as any[])[0].currentGwPoints).toBe(12);
   });
 
+  it('returns totalPoints as sum of all performance records', async () => {
+    prisma.gameweek.findFirst.mockResolvedValue({ id: 7 });
+    prisma.player.findMany.mockResolvedValue([
+      makePlayer({ performances: [{ totalPoints: 10, gameweekId: 5 }, { totalPoints: 7, gameweekId: 7 }] }),
+    ]);
+
+    const result = await service.findAll({ competitionId: 1 });
+    expect((result.data as any[])[0].totalPoints).toBe(17);
+    expect((result.data as any[])[0].currentGwPoints).toBe(7);
+  });
+
   it('sets currentGwPoints to null when player has no performance this GW', async () => {
     prisma.gameweek.findFirst.mockResolvedValue({ id: 7 });
     prisma.player.findMany.mockResolvedValue([
-      makePlayer({ performances: [] }),
+      makePlayer({ performances: [{ totalPoints: 10, gameweekId: 5 }] }),
     ]);
 
     const result = await service.findAll({ competitionId: 1 });

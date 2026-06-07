@@ -43,8 +43,7 @@ export class PlayersService {
         club: { include: { alias: true } },
         competitionPrices: { where: { competitionId } },
         performances: {
-          where: { gameweekId: currentGw?.id ?? 0 },
-          select: { totalPoints: true },
+          select: { totalPoints: true, gameweekId: true },
         },
       } satisfies Prisma.PlayerInclude;
 
@@ -62,10 +61,12 @@ export class PlayersService {
       const data = players.map((p) => {
         const price = p.competitionPrices[0];
         const resolved = this.aliasService.resolvePlayer(p, price ? Number(price.currentPrice) : undefined);
+        const totalPoints = p.performances.reduce((sum, perf) => sum + perf.totalPoints, 0);
+        const currentGwPoints = p.performances.find(perf => perf.gameweekId === currentGw?.id)?.totalPoints ?? null;
         return {
           ...resolved,
-          totalPoints: p.totalPoints,
-          currentGwPoints: p.performances[0]?.totalPoints ?? null,
+          totalPoints,
+          currentGwPoints,
         };
       });
 
